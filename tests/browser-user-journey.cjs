@@ -108,6 +108,42 @@ async function scenario(name,width,body){
       await nav('tomorrow');
       add(tag+'-synthetic-note-tomorrow','准备明天的菜单区域同样有说明',await p.locator('#menu-synthetic-note').count()===1,'');
     });
+    await scenario('full-then-menu-only',width,async({p,url,nav,tag,agent})=>{
+      await p.goto(url);await p.waitForSelector('#accept-disclaimer');await p.click('#accept-disclaimer');
+      await p.waitForSelector('#mode-full');await p.check('#mode-full');await p.click('#mode-continue');await p.click('#handover-assistant');
+      await p.waitForFunction(()=>document.querySelector('#gate').hidden&&document.querySelector('#main').dataset.view);
+      const banner=()=>p.locator('.prototype span').innerText();
+      add(tag+'-banner-full','全部打理下，顶部横幅是「本机私人记录 · AI 助手可以读写全部记录」',(await banner())==='本机私人记录 · AI 助手可以读写全部记录'&&!(await banner()).includes('不调用模型'),await banner());
+      agent('POST','/api/onboarding/diet',{answers:{allergy_reminders:['示例过敏原话'],free_note:'示例备注'},version:0});
+      for(const b of ['basic','treatment','habit'])agent('POST','/api/onboarding/'+b,{answers:{},version:0,skipped:true});   // 问卷其余三块也由助手收尾，换方式时不会再进向导
+      agent('POST','/api/observations',{date:'2031-03-04',diet:'partial'});                         // 没说时间
+      await p.reload();await p.locator('#main[data-view]').waitFor();
+      // 时间未记
+      await nav('record');
+      add(tag+'-time-unknown','助手没填时间：页面显示「时间未记」，时间框是空的，不是编出来的时间',(await p.locator('#time').inputValue())===''&&(await p.locator('#main').innerText()).includes('时间未记'),await p.locator('#time').inputValue());
+      await p.click('#record-form button[type=submit]');await p.waitForFunction(()=>document.querySelector('#notice').classList.contains('show'));
+      const saved=await p.evaluate(async()=>(await (await api('state')).json()).observation.filter(o=>o.kind==='daily').map(o=>o.content.time));
+      add(tag+'-time-stays-unknown','人不填时间直接保存：保存成功，时间仍是未记',saved.length>=1&&saved.every(t=>t===''),saved);
+      await nav('course');
+      add(tag+'-time-unknown-past','「已经记下的日子」里标「时间未记」',(await p.locator(`.past article[data-date="2031-03-04"]`).innerText()).includes('时间未记'),'');
+      // 改成第二种
+      await nav('settings');
+      await p.click('#assistant-change');await p.check('#mode-menu_only');await p.click('#mode-continue');await p.waitForFunction(()=>document.querySelector('#gate').hidden);await delay(400);
+      add(tag+'-banner-menu-only','第二种下，顶部横幅回到「本机私人记录 · 不调用模型」',(await banner())==='本机私人记录 · 不调用模型',await banner());
+      add(tag+'-recent-after-switch','改成第二种后，助手写过记录，所以仍显示「助手最近做了什么」',await p.locator('#assistant-recent li').count()>=2,'');
+      const diet=await p.locator('#settings-diet').innerText();
+      add(tag+'-ever-full-note','曾选过第一种：过敏、备注旁在原话后追加「之前选第一种时，助手已经能看到这些内容」',(diet.match(/之前选第一种时，助手已经能看到这些内容/g)||[]).length>=2&&/也不会给 AI 助手/.test(diet),diet.slice(0,300));
+      await nav('export');
+      add(tag+'-ever-full-note-export','导出给助手页的「不会给助手」说明同样追加',(await p.locator('#export-page').innerText()).includes('之前选第一种时，助手已经能看到这些内容'),'');
+    });
+    await scenario('menu-only-never-full',width,async({p,url,nav,tag})=>{
+      await p.goto(url);await passGate(p);await p.locator('#main[data-view]').waitFor();
+      await nav('settings');
+      const diet=await p.locator('#settings-diet').innerText();
+      add(tag+'-no-note-when-never-full','从来没选过第一种：保持原文案，不追加',!diet.includes('之前选第一种时')&&/也不会给 AI 助手/.test(diet),diet.slice(0,200));
+      add(tag+'-no-recent-without-agent','没有任何助手记录：不显示「助手最近做了什么」',await p.locator('#assistant-recent').count()===0,'');
+      add(tag+'-banner-menu-only-fresh','横幅是「本机私人记录 · 不调用模型」',(await p.locator('.prototype span').innerText())==='本机私人记录 · 不调用模型','');
+    });
     await scenario('agent-marks-and-table',width,async({p,url,nav,tag,agent})=>{
       await p.goto(url);await p.waitForSelector('#accept-disclaimer');await p.click('#accept-disclaimer');
       await p.waitForSelector('#mode-full');await p.check('#mode-full');await p.click('#mode-continue');await p.click('#handover-assistant');

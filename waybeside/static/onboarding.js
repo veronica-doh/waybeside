@@ -85,7 +85,7 @@ function buildBasic(d = {}) {
   node.append(
     field('怎么称呼你？（可不填；不用写真实姓名）', nick),
     radios('q-helper', '是你自己在用，还是有人帮忙一起记？', [['self', '我自己用'], ['with_helper', '有他人帮我一起记']], d.helper_mode || 'self'),
-    field(tm('wizard.age_hint'), age));
+    field(tmx('wizard.age_hint'), age));
   return {node, read() {
     const a = {helper_mode: picked(node, 'q-helper'), locale: 'zh-CN'};
     if (!a.helper_mode) throw new Error('请选择是谁在用。');
@@ -152,9 +152,9 @@ function buildDiet(d = {}, builtin = {}) {
   const note = element('textarea'); note.id = 'q-freenote'; note.maxLength = 500; note.value = d.free_note || '';
   const s1 = element('fieldset', undefined, 'field'); s1.append(element('legend', '你想要的饮食要求（自己勾；这些只是筛选用的标签，伴程不会替你解释它们的医学含义）'), tagBox, tagsUnknown,
     field('自己加一个标签', newTag), addTag);
-  const s2 = element('fieldset', undefined, 'field'); s2.append(element('legend', tm('wizard.allergy_legend')), aList.box, allergyUnknown,
+  const s2 = element('fieldset', undefined, 'field'); s2.append(element('legend', tmx('wizard.allergy_legend')), aList.box, allergyUnknown,
     field('写一条', newAllergy), addAllergy);
-  node.append(s1, s2, field(tm('wizard.note_label'), note));
+  node.append(s1, s2, field(tmx('wizard.note_label'), note));
   return {node, read() {
     // 写在框里、但没点“加一条 / 加一个标签”的内容，保存时一并算上，不静默丢掉。
     addPendingTag(); addPendingAllergy();
@@ -387,7 +387,7 @@ function assistantSection() {
   const actions = element('div', undefined, 'actions'); const change = element('button', t('settings.assistant.change'), 'secondary'); change.type = 'button'; change.id = 'assistant-change';
   change.onclick = () => { changingMode = true; render(); };
   actions.append(change); box.append(actions, element('p', t('settings.assistant.switch_note'), 'small'));
-  if (assistantMode === 'full') {
+  if (assistantMode === 'full' || (activityData?.recent || []).length) {
     const recent = element('div'); recent.id = 'assistant-recent';
     recent.append(element('h3', t('settings.assistant.recent_title')), element('p', t('settings.assistant.recent_note'), 'small'));
     const rows = activityData?.recent || [];
@@ -417,7 +417,7 @@ function exportPage() {
   const undecided = shareData.filter(r => r.version === 1);
   box.append(element('p', tm('export.eyebrow'), 'eyebrow'), element('h1', t('export.title')), exportBack(),
     element('p', tm('export.intro'), 'menu-state'),
-    element('p', tm('export.never'), 'small'));
+    element('p', tmx('export.never'), 'small'));
   if (undecided.length && assistantMode !== 'full') {
     const guide = element('div', undefined, 'note neutral'); guide.id = 'share-guide'; guide.setAttribute('role', 'status');
     guide.append(element('strong', `第一次来这里？下面还有 ${undecided.length} 项没决定，请一项一项来。`),

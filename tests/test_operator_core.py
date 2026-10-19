@@ -257,7 +257,7 @@ def test_full_switch_toggles_do_not_stale_but_mode_switch_does(env, cli):
     file = candidate(cli, out['package'], group_id='01')
     switch(env, 'menu_only')
     code, res = cli('submit', file)
-    assert code == 2 and res['status'] == 'STALE' and res['error'] == 'DEPENDENCIES_CHANGED'
+    assert code == 2 and res['status'] == 'FAILED' and res['job_status'] == 'STALE' and res['error'] == 'DEPENDENCIES_CHANGED'
 
 
 def test_switching_to_menu_only_after_the_request_started_rejects_the_agent_write(env, monkeypatch):
@@ -317,17 +317,46 @@ def test_lab_rows_are_attributed_row_by_row(env, cli):
     assert [x['recorded_by'] for x in aux_row(env)['content']['labs']] == ['local-user', 'local-user']
 
 
-def test_recorded_by_in_a_request_is_always_rejected(env, cli):
+def next_aux_version(env):
+    found = rows(env, "SELECT version FROM observation WHERE id='aux'")
+    return found[0]['version'] if found else 0
+
+
+def test_recorded_by_in_a_request_never_takes_effect(env, cli):
     choose_mode(env, 'full')
-    tagged = dict(lab('A', 3), recorded_by='agent')
-    assert env[2]('aux', aux_body([tagged], 0)).status_code == 400
-    assert env[2]('aux', dict(aux_body([lab('A', 3)], 0), recorded_by='agent')).status_code == 400
-    assert env[2]('observations', dict(date='2031-12-30', time='08:00', recorded_by='agent')).status_code == 400
-    code, out = cli.api('POST', '/api/aux', aux_body([tagged], 0))
-    assert code == 2 and out['status'] == 400
-    code, out = cli.api('POST', '/api/observations', dict(date='2031-12-30', time='08:00', recorded_by='local-user'))
-    assert code == 2 and out['status'] == 400
-    assert rows(env, "SELECT COUNT(*) AS n FROM observation")[0]['n'] == 0
+    for fake in ('agent', 'local-user'):
+        # 人（网页）提交时带什么伪值都记成 local-user；助手（命令行）带什么伪值都记成 agent
+        assert env[2]('aux', dict(aux_body([dict(lab('A', 3), recorded_by=fake)], next_aux_version(env)), recorded_by=fake)).status_code == 200
+        assert [x['recorded_by'] for x in aux_row(env)['content']['labs']] == ['local-user']
+        assert aux_row(env)['recorded_by'] == 'local-user'
+        code, out = cli.api('POST', '/api/aux', dict(aux_body([dict(lab('A', 3), recorded_by=fake), dict(lab('B', 4), recorded_by=fake)], next_aux_version(env)), recorded_by=fake))
+        assert code == 0 and out['status'] == 200
+        assert {x['metric']: x['recorded_by'] for x in aux_row(env)['content']['labs']} == {'A': 'local-user', 'B': 'agent'}
+        assert aux_row(env)['recorded_by'] == 'agent'
+        with connect(db_path(env)) as db:
+            db.execute("DELETE FROM observation WHERE id='aux'")
+    r = env[2]('observations', dict(date='2031-12-30', time='08:00', recorded_by='agent'))
+    assert r.status_code == 200
+    code, out = cli.api('POST', '/api/observations', dict(date='2031-12-30', time='09:00', recorded_by='local-user'))
+    assert code == 0 and out['status'] == 200
+    assert [x['recorded_by'] for x in rows(env, "SELECT recorded_by FROM observation WHERE kind='daily' ORDER BY rowid")] == ['local-user', 'agent']
+
+
+def test_lab_rows_read_back_from_state_can_be_written_back_unchanged(env, cli):
+    choose_mode(env, 'full')
+    assert env[2]('aux', aux_body([lab('A', 3)], 0)).status_code == 200
+    code, out = cli.api('POST', '/api/aux', aux_body([lab('A', 3), lab('B', 4)], 1))
+    assert code == 0
+    row = next(o for o in env[3]().json['observation'] if o['id'] == 'aux')
+    assert all('recorded_by' in x for x in row['content']['labs'])
+    body = dict(row['content'], version=row['version'])               # 原样写回，一个键都不删
+    code, out = cli.api('POST', '/api/aux', body)
+    assert code == 0 and out['status'] == 200, out
+    assert {x['metric']: x['recorded_by'] for x in aux_row(env)['content']['labs']} == {'A': 'local-user', 'B': 'agent'}
+    # 缺键时指到具体哪一行哪个键
+    broken = dict(body, version=out['body']['version'], labs=[{k: v for k, v in body['labs'][0].items() if k != 'unit'}])
+    code, out = cli.api('POST', '/api/aux', broken)
+    assert out['status'] == 400 and out['body']['field'] == 'labs[0].unit'
 
 
 def test_observation_and_session_attribution(env, cli):

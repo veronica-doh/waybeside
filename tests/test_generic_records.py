@@ -106,9 +106,7 @@ def test_demo_labs_survive_a_normal_edit_roundtrip(tmp_path):
     state = e[3]().json
     row = next(r for r in state['observation'] if r['id'] == 'aux')
     body = dict(row['content'], version=row['version'])
-    assert e[2]('aux', body).status_code == 400            # 检验行带 recorded_by 一律拒绝
-    body['labs'] = [{k: v for k, v in lab.items() if k != 'recorded_by'} for lab in body['labs']]
-    assert e[2]('aux', body).status_code == 200
+    assert e[2]('aux', body).status_code == 200            # 读回的检验行（带记录者）原样写回也行，记录者由服务端决定
 
 
 def test_examples_dir_has_no_october_2026_dates():

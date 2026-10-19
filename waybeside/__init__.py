@@ -154,15 +154,19 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
     @app.post('/api/observations')
     def observation():
         data = request.get_json()
-        exact(data, [*FIELDS, 'id','version','date','time','session','minutes','note','symptoms'])
+        exact(data, [*FIELDS, 'id','version','date','time','session','minutes','note','symptoms','recorded_by'])
+        data = {k: v for k, v in data.items() if k != 'recorded_by'}     # 记录者只由服务端决定：客户端传什么都不生效
         observed = day(data['date'])
         if observed > day(current_day()):
             raise FieldError('date')
-        clock = text(data['time'], 5, 'time')
-        with field('time'):
-            datetime.strptime(clock, '%H:%M')
-        if len(clock) != 5:
-            raise FieldError('time')
+        if data.get('time') is None:
+            clock = ''             # 没说时间就是“时间未记”：存空，不替人编一个
+        else:
+            clock = text(data['time'], 5, 'time')
+            with field('time'):
+                datetime.strptime(clock, '%H:%M')
+            if len(clock) != 5:
+                raise FieldError('time')
         content = {k: data.get(k, 'unknown') for k in FIELDS}
         # 症状条目由用户自选自加：名称为用户自填文字（≤20 字，最多 20 项），状态只有 未记录/没有/有。
         symptoms = data.get('symptoms', {})
@@ -198,7 +202,8 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
     @app.post('/api/aux')
     def auxiliary():
         data = request.get_json()
-        exact(data, ['labs','question','rhythm','celebration','version'])
+        exact(data, ['labs','question','rhythm','celebration','version','recorded_by'])
+        data = {k: v for k, v in data.items() if k != 'recorded_by'}     # 记录者只由服务端决定
         for name in ('labs','question','rhythm','celebration','version'):
             if name not in data:
                 raise FieldError(name)         # 五项都是必填
@@ -216,8 +221,13 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
         if not isinstance(data['labs'],list) or len(data['labs'])>1000:
             raise FieldError('labs')
         for row in data['labs']:
-            if not isinstance(row, dict) or set(row) != {'date','metric','unit','lab','value','low','high'}:
+            if not isinstance(row, dict):
                 raise FieldError('labs')
+            row.pop('recorded_by', None)          # 读回的行带着记录者，原样写回也行；写入时忽略它，归属由服务端按行比对决定
+            wanted = {'date','metric','unit','lab','value','low','high'}
+            if set(row) != wanted:
+                bad_key = sorted(wanted - set(row)) or sorted(set(row) - wanted)
+                raise FieldError(f"labs[{data['labs'].index(row)}].{bad_key[0]}")
             if day(row['date'],'labs')>day(current_day()):
                 raise FieldError('labs')
             if not text(row['metric'],40,'labs').strip():

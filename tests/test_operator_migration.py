@@ -129,7 +129,7 @@ def test_upgrade_makes_waiting_and_ready_candidates_stale(tmp_path):
     cand.write_text(json.dumps({'job_id': 'job-waiting'}))
     with pytest.raises(CandidateError) as error:
         agent_door.submit_candidate(path, cand)
-    assert error.value.status == 'STALE'
+    assert error.value.status == 'FAILED' and error.value.job_status == 'STALE'
 
 
 def test_restore_of_an_older_backup_starts_unset_with_the_disclaimer_kept(tmp_path):

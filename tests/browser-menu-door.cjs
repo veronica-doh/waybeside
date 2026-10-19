@@ -55,7 +55,7 @@ async function run(mode){
     // STALE：export 后在页面换一组，再提交
     await p.locator('#menu-change').click();await delay(900);
     const f=path.join(tmp,'stale.json');make(pkgPath,f);const stale=cli('submit',f);
-    add(mode+'-stale','export 后菜单变化 → STALE 被拒',stale.code===2&&stale.out.status==='STALE',stale.out);
+    add(mode+'-stale','export 后菜单变化 → STALE 被拒',stale.code===2&&stale.out.status==='FAILED'&&stale.out.job_status==='STALE'&&stale.out.error==='DEPENDENCIES_CHANGED',stale.out);
     // 正常链路：重新 export → 示例脚本 → submit
     await p.locator('#menu-cancel').click().catch(()=>{});await delay(700);
     const exp2=cli('export');const cand=path.join(tmp,'cand.json');const gen=make(exp2.out.package,cand);

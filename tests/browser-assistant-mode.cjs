@@ -191,7 +191,7 @@ async function openToModePage({p,url,shot,stage,wait,noOverflow,api,tag}){
       const refused=cli('api','GET','/api/state');
       add(tag+'-switch-back','换回第二种：助手命令行立即被拒，已写入的内容和标注仍在',refused.out.error==='MODE_NOT_ALLOWED'&&refused.code===2&&await p.locator('#settings-basic h2 .agent-mark').count()===1,refused.out);
       await nav('settings');
-      add(tag+'-recent-hidden-menu-only','换回第二种后，设置页不再显示「助手最近做了什么」',await p.locator('#assistant-recent').count()===0,'');
+      add(tag+'-recent-kept-menu-only','换回第二种后，因为助手写过记录，设置页仍显示「助手最近做了什么」',await p.locator('#assistant-recent li').count()>=5,'');
     });
   }
 

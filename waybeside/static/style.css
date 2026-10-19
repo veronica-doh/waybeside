@@ -124,5 +124,5 @@ body.gating .demo-banner{display:none}
 /* 求助页之外的补充：未登录时收起导航；窄屏表格提示。 */
 body.signed-out .nav,body.signed-out .head-links,body.signed-out footer .text-button{display:none}
 .table-hint{display:none}.table-scroll{overflow-x:auto}.table-scroll table{min-width:560px}
-@media(max-width:650px){.table-hint{display:block}}
+@media(max-width:650px){.table-hint{display:block}.lab-trend svg text{font-size:24px}}
 .checkin-card .card-top .agent-mark{margin-left:12px}

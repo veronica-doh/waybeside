@@ -5,7 +5,7 @@ import time
 
 import pytest
 from flask import Flask, g
-from support import make_env, choose_mode, Cli, TODAY
+from support import make_env, choose_mode, Cli, TODAY, course_settings
 from waybeside import login
 from waybeside.storage import connect, initialize
 
@@ -200,15 +200,17 @@ def test_aux_names_every_missing_or_malformed_field(web):
     assert bad(web, 'aux', dict(AUX_OK, rhythm=7)) == 'rhythm'
     assert bad(web, 'aux', dict(AUX_OK, question=5)) == 'question'
     assert bad(web, 'aux', dict(AUX_OK, version='0')) == 'version'
-    assert bad(web, 'aux', dict(AUX_OK, labs=[{'date': '2031-01-01'}])) == 'labs'
+    assert bad(web, 'aux', dict(AUX_OK, labs=[{'date': '2031-01-01'}])) == 'labs[0].high'
     assert bad(web, 'aux', dict(AUX_OK, extra=1)) == 'extra'
+    assert bad(web, 'aux', dict(AUX_OK, labs=[{'date': '2031-01-01', 'metric': 'm', 'unit': 'u', 'lab': 'l', 'value': 1, 'low': None, 'high': None, 'extra': 1}])) == 'labs[0].extra'
     assert web[2]('aux', AUX_OK).status_code == 200
 
 
 def test_other_write_endpoints_name_the_field_too(web):
     post = web[2]
     assert bad(web, 'observations', {'time': '08:00'}) == 'date'
-    assert bad(web, 'observations', {'date': '2031-12-30'}) == 'time'
+    assert bad(web, 'observations', {'date': '2031-12-30', 'time': ''}) == 'time'
+    assert bad(web, 'observations', {'date': '2031-12-30', 'time': 'unknown'}) == 'time'
     assert bad(web, 'observations', {'date': 'nope', 'time': '08:00'}) == 'date'
     assert bad(web, 'observations', {'date': '2031-12-30', 'time': '25:00'}) == 'time'
     assert bad(web, 'observations', {'date': '2031-12-30', 'time': '08:00', 'minutes': 'x'}) == 'minutes'
@@ -329,3 +331,91 @@ def test_export_output_inside_a_repository_is_refused_but_the_default_still_work
     assert code == 0 and Path(out['package']).is_file()
     code, out = cli('export', '--date', TARGET)
     assert code == 0 and Path(out['package']).parent == data / 'agent_inbox'
+
+
+# ---------------------------------------------------------------- 第三轮用户旅程
+def test_observation_time_may_be_left_out_and_is_stored_as_unknown(web):
+    from waybeside.storage import connect as conn
+    post, get = web[2], web[3]
+    day = '2031-12-30'
+    a = post('observations', dict(date=day, diet='partial')).json                       # 不写 time
+    b = post('observations', dict(date=day, time=None, note='x')).json                  # time 为 null
+    c = post('observations', dict(date=day, time='08:30', note='known')).json
+    assert a['time'] == '' and b['time'] == '' and c['time'] == '08:30'
+    with conn(web[0].config['DB_PATH']) as db:
+        stamps = [r[0] for r in db.execute("SELECT occurred_at FROM observation WHERE kind='daily' ORDER BY rowid")]
+    assert stamps == [day + 'T', day + 'T', day + 'T08:30']                             # 未知时间 = 只有日期，排在同一天任何已知时间之前
+    rows = [o for o in get().json['observation'] if o['kind'] == 'daily']
+    assert [o['content']['time'] for o in rows] == ['', '', '08:30']
+    # 更新一条未知时间的记录：仍可改，也可以补上时间
+    again = post('observations', dict(date=day, id=a['id'], version=a['version'], diet='done')).json
+    assert again['time'] == '' and again['version'] == 2
+    filled = post('observations', dict(date=day, id=a['id'], version=again['version'], time='21:05')).json
+    assert filled['time'] == '21:05'
+    # 与治疗记录关联不依赖时间（跨午夜关联靠治疗记录编号）
+    assert web[2]('course', course_settings()).status_code == 200
+    first = get().json['course_revision']
+    assert post('course/generate', {'expected_revision': first}).status_code == 201
+    session = get().json['treatment_session'][0]
+    linked = post('observations', dict(date='2031-12-31', session=str(session['id']))).json
+    assert linked['session'] == str(session['id']) and linked['time'] == ''
+    summary = get('summary').json
+    assert any(o['content'].get('time') == '' for o in summary['observation'] if o['kind'] == 'daily')
+
+
+def test_failed_submit_never_reports_a_pending_status(tmp_path, monkeypatch, capsys):
+    from test_operator_core import library_ready, candidate, TARGET
+    data = tmp_path / 'data'
+    data.mkdir()
+    env = make_env(data, mode=None)
+    choose_mode(env, 'full')
+    library_ready(env)
+    cli = Cli(monkeypatch, capsys, data)
+    code, out = cli('export', '--date', TARGET, '--output', cli.work / 'p1.json')
+    first = candidate(cli, out['package'], group_id='06')
+    assert cli('submit', first)[1]['status'] == 'READY_TO_REVIEW'
+    code, out2 = cli('export', '--date', TARGET, '--output', cli.work / 'p2.json')
+    code, res = cli('submit', first)                                        # 已被替换的任务
+    assert code == 2 and res['error'] == 'JOB_NOT_WAITING' and res['status'] == 'FAILED' and res['job_status'] == 'READY_TO_REVIEW'
+    # 各种失败路径：status 恒为 FAILED
+    broken = cli.work / 'broken.json'
+    for text, error in (('{"job_id": "x"}', 'UNKNOWN_JOB'), ('{not json', 'INVALID_JSON'), ('[]', 'SCHEMA_FIELDS')):
+        broken.write_text(text)
+        code, res = cli('submit', broken)
+        assert code == 2 and res['error'] == error and res['status'] == 'FAILED', res
+    code, res = cli('submit', cli.work / 'missing.json')
+    assert code == 2 and res['status'] == 'FAILED'
+    # 字段缺失 / 多余时指出是哪个
+    package = json.loads(Path(out2['package']).read_text(encoding='utf-8'))
+    wrong = {k: v for k, v in dict(package['candidate_template'], surprise=1, group_id='06').items() if k != 'reason_code'}
+    broken.write_text(json.dumps(wrong))
+    code, res = cli('submit', broken)
+    assert res['error'] == 'SCHEMA_FIELDS' and res['status'] == 'FAILED' and 'surprise' in res['extra'] and 'reason_code' in res['missing']
+    # 过期（资料已变）
+    cli('export', '--date', TARGET, '--output', cli.work / 'p3.json')
+    env[2]('menu/action', dict(action='preference', target_date=TARGET, revision=env[3]('menu?date=' + TARGET).json['state']['revision'],
+                               library_hash=env[3]('menu?date=' + TARGET).json['state']['library_hash'], group_id='05', favorite=True, avoided=False))
+    package3 = json.loads((cli.work / 'p3.json').read_text(encoding='utf-8'))
+    stale = cli.work / 'stale.json'
+    stale.write_text(json.dumps(dict(package3['candidate_template'], group_id='06', reason_code='VARIETY')))
+    code, res = cli('submit', stale)
+    assert res['error'] == 'DEPENDENCIES_CHANGED' and res['status'] == 'FAILED' and res['job_status'] == 'STALE'
+
+
+def test_state_remembers_that_full_was_ever_chosen(tmp_path):
+    from test_operator_core import switch
+    data = tmp_path / 'data'
+    data.mkdir()
+    env = make_env(data, mode=None)
+    choose_mode(env, 'menu_only')
+    assert env[3]().json['ever_full'] is False
+    switch(env, 'full')
+    assert env[3]().json['ever_full'] is True
+    switch(env, 'menu_only')
+    state = env[3]().json
+    assert state['assistant_mode'] == 'menu_only' and state['ever_full'] is True      # 换回去也记得
+    other = tmp_path / 'other'
+    other.mkdir()
+    fresh = make_env(other, mode=None)
+    choose_mode(fresh, 'menu_only')
+    assert fresh[3]().json['ever_full'] is False                                      # 从来没选过

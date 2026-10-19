@@ -2,9 +2,11 @@
 // 用户文字只作为 textContent / value / 属性值写入 DOM，从不参与 HTML 解析。
 let courseRevision=0, demoMode=false, stateLoaded=false;
 let gateInfo={disclaimer:false,onboarded:false};   // 首次启动门：免责确认 → 选使用方式 → 问卷向导 → 主界面
-let assistantMode='unset', assistantModeVersion=0, activityData=null, upgradeNotice=false;
+let assistantMode='unset', assistantModeVersion=0, activityData=null, upgradeNotice=false, everFull=false;
 // 按使用方式显示的文案：键名 prefix.menu_only / prefix.full（文案都在 i18n 里）。
 const tm=prefix=>t(prefix+'.'+(assistantMode==='full'?'full':'menu_only'));
+// 曾经选过「全部打理」的库，在第二种方式下，凡是写“不会给助手”的地方追加一句事实。
+const tmx=prefix=>tm(prefix)+(assistantMode!=='full'&&everFull?' '+t('mode.ever_full_note')+'。':'');
 const agentMark=()=>tag(t('mark.agent'),'agent-mark');
 const recentAgentMark=flag=>flag?tag(t('mark.recent'),'agent-mark'):'';
 let resolveStateReady;const stateReady=new Promise(resolve=>{resolveStateReady=resolve;});
@@ -44,7 +46,7 @@ function readableAudit(event){
 function loadState(state){
   demoMode=state.demo===true; courseRevision=state.course_revision||0;
   gateInfo={disclaimer:state.disclaimer_accepted===true,onboarded:state.onboarded===true};
-  assistantMode=['menu_only','full'].includes(state.assistant_mode)?state.assistant_mode:'unset'; assistantModeVersion=state.assistant_mode_version||0; upgradeNotice=state.upgrade_notice===true;
+  assistantMode=['menu_only','full'].includes(state.assistant_mode)?state.assistant_mode:'unset'; assistantModeVersion=state.assistant_mode_version||0; upgradeNotice=state.upgrade_notice===true; everFull=state.ever_full===true;
   if(state.today)TODAY=state.today;
   labRecords.length=0;selectedLab="";auxVersion=0;questionNote="";labRhythm={blood:null,chemistry:null};
   course=state.treatment_course[0]||null; settingsVersion=state.settings_version||0; scheduleOutOfSync=state.schedule_out_of_sync===true;
@@ -71,7 +73,7 @@ async function loadActivity(){try{activityData=await (await api('assistant-activ
 async function refreshState(){loadState(await (await api('state')).json());await Promise.all([typeof loadSettings==='function'?loadSettings():null,loadActivity()]);}
 async function persistRecord(next){
   if(busy)throw new Error('正在保存，请稍等。');busy=true;
-  try{const payload=Object.fromEntries(Object.entries(next).filter(([k])=>!k.startsWith('sym_')&&k!=='recorded_by'));const result=await (await api('observations',payload)).json();await refreshState();record={...result};changeState();}
+  try{const payload=Object.fromEntries(Object.entries(next).filter(([k])=>!k.startsWith('sym_')&&k!=='recorded_by'));if(!payload.time)payload.time=null;/* 没填时间就是“时间未记” */const result=await (await api('observations',payload)).json();await refreshState();record={...result};changeState();}
   finally{busy=false;}
 }
 async function persistSession(s,action,date,confirmOff=false){

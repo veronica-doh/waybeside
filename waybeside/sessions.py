@@ -74,6 +74,7 @@ def state(db, today):
         # 首次设置完成 = 问卷四块都已填写或明确跳过。
         onboarded=is_onboarded(db), disclaimer_accepted=disclaimer_accepted(db),
         assistant_mode=assistant_mode(db), assistant_mode_version=assistant_mode_version(db),
+        ever_full=assistant_mode(db) == 'full' or db.execute("SELECT 1 FROM audit WHERE entity='assistant_mode' AND detail LIKE '%\"to\": \"full\"%' LIMIT 1").fetchone() is not None,
         upgrade_notice=db.execute("SELECT 1 FROM metadata WHERE key='upgrade_notice'").fetchone() is not None,
         demo=bool((db.execute("SELECT value FROM metadata WHERE key='demo'").fetchone() or ['0'])[0] == '1'),
         completed=sum(s['status'] == 'completed' for s in result['treatment_session']),

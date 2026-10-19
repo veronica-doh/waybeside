@@ -33,7 +33,7 @@ python3.11 -m venv .venv
 .venv/bin/python -m waybeside.agent_door open-url
 ```
 
-所有子命令都只输出一个 JSON 对象，里面的 `data_dir` 是它实际用的数据目录、`demo` 说明是不是演示库，**写之前先核对这两项是不是人要用的那个库**。失败时 `status` 字段是 `FAILED` 或 HTTP 码，`error` 是错误码，退出码为 2；错误里的 `say` 是可以原样转告人的话。
+所有子命令都只输出一个 JSON 对象，里面的 `data_dir` 是它实际用的数据目录、`demo` 说明是不是演示库，**写之前先核对这两项是不是人要用的那个库**。失败时 `status` 字段是 `FAILED`（`api` 则是 HTTP 码），`error` 是错误码，退出码为 2；**以 `error` 和退出码判断成败，`status` 为 `READY_TO_REVIEW` 或 `WAITING_EXTERNAL` 只出现在成功的结果里**。失败时如果还有任务当时的状态，会放在另一个字段 `job_status` 里（例如 `STALE`）。错误里的 `say` 是可以原样转告人的话。
 
 `status` 里的 `assistant_mode` 是人在网页上选的使用方式：
 
@@ -84,6 +84,10 @@ python3.11 -m venv .venv
 | 每日记录里的 `energy` | `unknown`、`还可以`、`有点累`、`想多休息` |
 | 每日记录里 `symptoms` 的值 | `unknown`、`none`、`some` |
 
+`symptoms` 的键是自由文字（每项最多 20 个字、最多 20 项），没有固定名称；网页默认列出「食欲」「恶心」「疲劳」「疼痛」四项，你写别的名字，网页会把它也列成一项身体感受。尽量沿用人自己的说法或这四个名字。
+
+每日记录的 `time`（`HH:MM`）**可以不填**（不写，或写 `null`）：人没说时间就不要填，不要编一个，网页会显示「时间未记」。写 `""` 或 `"unknown"` 会被拒绝。
+
 他人帮忙记录时，请写 `with_helper`，不要为了通过校验写成 `self`。
 
 ```json basic.json
@@ -109,6 +113,8 @@ python3.11 -m venv .venv
 .venv/bin/python -m waybeside.agent_door api POST /api/onboarding/diet --json "$WORK/diet.json"
 .venv/bin/python -m waybeside.agent_door api POST /api/onboarding/habit --json "$WORK/habit.json"
 ```
+
+`treatment` 的 `answers` 里的 `settings_version` 是疗程设置的版本：新库写 `0`，已有疗程时取 `api GET /api/state` 里的 `settings_version`（改疗程设置时也一样）。
 
 要整块跳过：`{"answers": {}, "version": 0, "skipped": true}`。治疗类型 `radiotherapy` / `chemotherapy` / `other`，计数 `session`（次）/ `cycle`（周期），排期 `weekdays`（每周固定几天，`weekdays` 里 0 是周一）/ `manual`（逐次添加）。标签只能是内置词表或这个人自加的标签。**过敏提醒是人的原话，不是过敏原数据**，见“护栏”。
 
@@ -147,7 +153,7 @@ python3.11 -m venv .venv
 {"date": "2026-10-20", "time": "20:30", "diet": "done", "sleep": "good", "mood": "平静", "energy": "还可以", "exercise": "partial", "meditation": "done", "minutes": "15", "note": "示例备注", "symptoms": {"食欲": "none", "疲劳": "some"}}
 ```
 
-检验在 `aux` 里，是**整表覆盖**：把现有的检验行都带上再加新的，否则会丢掉旧的。**五个字段都是必填**：`labs`（检验行的列表，可以是空列表 `[]`）、`question`（复诊想问的问题，文字，可以是空字符串）、`rhythm`（检查节奏，写成 `{"blood": 天数或 null, "chemistry": 天数或 null}`，天数是 1 到 365 的整数，不确定就写 `null`）、`celebration`（是否在打卡完成时显示一句祝贺，`true` 或 `false`；没有人要求就沿用现有值，新库写 `true`）、`version`。缺哪个，返回 `INVALID_FIELD`，`body.field` 就是哪个。每个检验行必须正好有这七项：`date`、`metric`、`unit`、`lab`、`value`、`low`、`high`（`value`、`low`、`high` 可以是 `null`，但 `low` 和 `high` 要么都有、要么都是 `null`）。新增和改动的行会标「助手记录」，没动的行保持原样。`version` 取自 `state` 里 `aux` 那一条（没有就是 0）。
+检验在 `aux` 里，是**整表覆盖**：把现有的检验行都带上再加新的，否则会丢掉旧的。从 `state` 读回的检验行带着 `recorded_by`，**可以原样写回**：服务端会忽略它，记录者只由服务端按行比对决定，你传什么都不生效。**五个字段都是必填**：`labs`（检验行的列表，可以是空列表 `[]`）、`question`（复诊想问的问题，文字，可以是空字符串）、`rhythm`（检查节奏，写成 `{"blood": 天数或 null, "chemistry": 天数或 null}`，天数是 1 到 365 的整数，不确定就写 `null`）、`celebration`（是否在打卡完成时显示一句祝贺，`true` 或 `false`；没有人要求就沿用现有值，新库写 `true`）、`version`。缺哪个，返回 `INVALID_FIELD`，`body.field` 就是哪个。每个检验行必须正好有这七项：`date`、`metric`、`unit`、`lab`、`value`、`low`、`high`（`value`、`low`、`high` 可以是 `null`，但 `low` 和 `high` 要么都有、要么都是 `null`）。新增和改动的行会标「助手记录」，没动的行保持原样。`version` 取自 `state` 里 `aux` 那一条（没有就是 0）。
 
 ```json labs.json
 {"labs": [{"date": "2026-10-19", "metric": "示例指标 A", "unit": "示例单位", "lab": "虚构实验室", "value": 12, "low": 10, "high": 20}], "question": "复诊想问的示例问题", "rhythm": {"blood": 14, "chemistry": null}, "celebration": true, "version": 0}
@@ -244,7 +250,7 @@ print(json.dumps({"menu": menu, "digest": preview["digest"], "expected": preview
 
 不允许改克数、新造菜、写自由文本，也没有药物、医嘱、运动、冥想字段。锁定的餐次必须与当前已采用的餐完全一致；被标“暂不想吃”的组（及其中的餐）直接拒绝，不尝试绕过。
 
-**提交只进待审**：`submit` 成功只返回 `READY_TO_REVIEW`、`adopted=false`。方式二下，人到“准备明天”查看与当前菜单的逐餐对照，勾选确认后才采用，采用后可在“我的方案”撤销。export 之后菜单、偏好、规则或开关有任何变化，提交会返回 `STALE`，需重新 export。
+**提交只进待审**：`submit` 成功只返回 `READY_TO_REVIEW`、`adopted=false`；失败时 `status` 一律是 `FAILED`（见上）。方式二下，人到“准备明天”查看与当前菜单的逐餐对照，勾选确认后才采用，采用后可在“我的方案”撤销。export 之后菜单、偏好、规则或开关有任何变化，提交会失败，`error` 是 `DEPENDENCIES_CHANGED`、`job_status` 是 `STALE`，需重新 export。
 
 ### 合成示例
 
@@ -289,7 +295,7 @@ Path(sys.argv[2]).write_text(json.dumps(candidate, ensure_ascii=False), encoding
 | `SHARE_DISABLED` | 人没开启“菜单库”共享（方式二） | 转告人去网页“导出给助手”开启 |
 | `GROUP_NOT_ALLOWED` | 通用拒绝（相关共享类别未开启，不说明原因） | 按资料包里有的挑 |
 | `NO_MENU_LIBRARY` | 尚未导入菜单库 | 请人导入，或方式一下用 `menu/import-*` |
-| `SCHEMA_FIELDS` | 多余或缺失字段 | 对照候选格式 |
+| `SCHEMA_FIELDS` | 多余或缺失字段（输出里的 `missing` 和 `extra` 列出缺了、多了哪些） | 对照候选格式 |
 | `IDENTITY_MISMATCH` | 身份字段被改 | 原样复制 `candidate_template` |
 | `UNKNOWN_GROUP` / `UNKNOWN_MEAL` | 未知组 / 未知餐 | 只用资料包里的 |
 | `MEAL_SET` / `MEAL_SLOT_MISMATCH` | 餐次集合不是五个 / 餐次错配 | 五个餐次各一项且同餐次 |
@@ -297,11 +303,11 @@ Path(sys.argv[2]).write_text(json.dumps(candidate, ensure_ascii=False), encoding
 | `AVOIDED_MENU` | 选了“暂不想吃”（需已开启 `preferences`） | 换一组 |
 | `RULE_EXCLUDED` | 被本人的规则筛选排除（需已开启 `requirement_tags`） | 换一组 |
 | `REASON_CODE` / `QUESTION_CODE` | 非枚举内容 | 只用规定的枚举 |
-| `OPEN_QUESTIONS` | 有待本人澄清的问题（状态 `NEEDS_CLARIFICATION`） | 转告人澄清 |
+| `OPEN_QUESTIONS` | 有待本人澄清的问题（`job_status` 是 `NEEDS_CLARIFICATION`） | 转告人澄清 |
 | `DUPLICATE_KEY` / `NONFINITE_NUMBER` / `INVALID_JSON` | JSON 重复键 / 非有限数 / 非法 JSON | 修正文件 |
 | `OUTPUT_LIMIT` | 候选超过 64 KiB | 精简 |
-| `DEPENDENCIES_CHANGED`（状态 `STALE`） | 资料已变 | 重新 export |
-| `JOB_NOT_WAITING` | 任务已提交、取消或失效，不自动重送 | 重新 export |
+| `DEPENDENCIES_CHANGED`（`job_status` 是 `STALE`） | 资料已变 | 重新 export |
+| `JOB_NOT_WAITING` | 任务已提交、被新的 export 替换或已失效，不自动重送（`job_status` 是它当时的状态，失败的 `status` 仍是 `FAILED`） | 重新 export |
 | `UNKNOWN_JOB` / `EXPORT_REQUIRED` | 先 export | 先 export |
 
 `api` 的返回里 `body` 还可能带这些业务码（HTTP 409 / 400）：`INVALID_FIELD`（400，`body.field` 是不合格的字段名，不会回显你写的值；缺必填项时也指向它）、`CONFIRM_REQUIRED`（这天不在治疗日，需要意图标记 `confirm_off_schedule`）、`RULE_CONFIRM_REQUIRED`（这一组被规则隐藏，需要意图标记 `rule_confirmed`）、`CANNOT_GENERATE`（先填好按星期排期、总次数和开始日）、`NOTHING_TO_GENERATE`（已有的次数已达到总数）、`DISCLAIMER_REQUIRED`。单纯的 409 说明版本过期，重新读再写。

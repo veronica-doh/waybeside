@@ -292,6 +292,9 @@ def main(argv=None):
         result = dict({'status': failure.status, 'error': failure.code}, **failure.extra)
     except CandidateError as error:
         result = {'status': error.status, 'error': error.code}
+        if error.job_status:
+            result['job_status'] = error.job_status
+        result.update(error.details)
     except (OSError, ValueError, sqlite3.Error) as error:
         busy = isinstance(error, sqlite3.OperationalError)
         result = {'status': 503 if busy and args.command == 'api' else 'FAILED',

@@ -12,8 +12,9 @@ from .storage import FieldError, connect, encode, audit, effective_flags, assist
 from .menu_library import MEALS, NUTRIENTS, active, frozen, read_day, save_day, recommend, check_locks
 
 class CandidateError(ValueError):
-    def __init__(self, code, status='FAILED'):
-        self.code, self.status = code, status
+    def __init__(self, code, job_status=None, **details):
+        # 失败就是失败：status 恒为 FAILED；任务当时的状态（STALE、已替换……）放在 job_status 里。
+        self.code, self.status, self.job_status, self.details = code, 'FAILED', job_status, details
         super().__init__(code)
 
 
@@ -227,14 +228,17 @@ def export_package(path, target, output=None):
     result = {'status': 'WAITING_EXTERNAL', 'job_id': snap['job_id'], 'package': str(destination)}
     if had_ready:
         # 同一天上一份已提交、人还没看的建议，会被这次的新任务替换：明说，别让助手意外作废。
-        result.update(replaces_pending=True, say='你之前提交、他还没看的那份建议，会被这次的新任务替换，网页上会显示“已作废”。需要的话请重新提交。')
+        result.update(replaces_pending=True, say='我之前提交、你还没看的那份建议，会被这次的新任务替换，网页上会显示“已作废”。需要的话我会重新提交。')
     return result
 
 def validate(raw, snap, db, lib, state, flags, hidden=()):
     data = decode(raw)
     base = {'job_id', 'target_date', 'snapshot_versions', 'reason_code', 'open_questions'}
     if not isinstance(data, dict) or set(data) not in (base | {'group_id'}, base | {'meals'}):
-        raise CandidateError('SCHEMA_FIELDS')
+        keys = set(data) if isinstance(data, dict) else set()
+        missing = sorted(base - keys) + ([] if keys & {'group_id', 'meals'} else ['group_id 或 meals（二选一）'])
+        extra = sorted(keys - (base | {'group_id', 'meals'})) + (['group_id 和 meals 只能给一个'] if {'group_id', 'meals'} <= keys else [])
+        raise CandidateError('SCHEMA_FIELDS', missing=missing, extra=extra)
     for k in ('job_id', 'target_date', 'snapshot_versions'):
         if data[k] != snap[k]:
             raise CandidateError('IDENTITY_MISMATCH')
