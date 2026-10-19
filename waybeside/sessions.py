@@ -6,7 +6,7 @@
 from datetime import date, datetime, timedelta, timezone
 import json
 from flask import abort, jsonify, request
-from .storage import (connect, encode, audit, REDACTED_ENTITIES, is_onboarded, disclaimer_accepted,
+from .storage import (FieldError, connect, encode, audit, REDACTED_ENTITIES, is_onboarded, disclaimer_accepted,
                       assistant_mode, assistant_mode_version, current_actor)
 
 TYPES = ('radiotherapy', 'chemotherapy', 'other')
@@ -135,27 +135,29 @@ class CourseError(Exception):
 def parse_settings(data, day, exact):
     exact(data, ['treatment_type', 'label', 'count_unit', 'total_count', 'schedule_kind', 'weekdays',
                  'start_date', 'settings_version', 'reschedule', 'expected_revision'])
-    if data['treatment_type'] not in TYPES or data.get('count_unit', 'session') not in ('session', 'cycle'):
-        raise ValueError('疗程类型')
+    if data['treatment_type'] not in TYPES:
+        raise FieldError('treatment_type')
+    if data.get('count_unit', 'session') not in ('session', 'cycle'):
+        raise FieldError('count_unit')
     label = data.get('label')
     if label is not None and (not isinstance(label, str) or len(label) > 60):
-        raise ValueError('名称')
+        raise FieldError('label')
     total = data.get('total_count')
     if total is not None and (type(total) is not int or not 1 <= total <= 200):
-        raise ValueError('总次数')
+        raise FieldError('total_count')
     kind = data['schedule_kind']
     if kind not in ('weekdays', 'manual'):
-        raise ValueError('排期方式')
+        raise FieldError('schedule_kind')
     weekdays = data.get('weekdays', [])
     if not isinstance(weekdays, list) or any(type(w) is not int or not 0 <= w <= 6 for w in weekdays) or len(set(weekdays)) != len(weekdays):
-        raise ValueError('治疗星期')
+        raise FieldError('weekdays')
     if kind == 'weekdays' and not weekdays:
-        raise ValueError('治疗星期不能为空')
+        raise FieldError('weekdays')
     start = data.get('start_date')
     if start is not None:
-        day(start)
+        day(start, 'start_date')
     if type(data.get('reschedule', False)) is not bool:
-        raise ValueError('重排确认')
+        raise FieldError('reschedule')
     return dict(treatment_type=data['treatment_type'], label=label, count_unit=data.get('count_unit', 'session'),
                 total_count=total, schedule_kind=kind, weekdays=encode(sorted(weekdays)), start_date=start)
 
@@ -241,7 +243,7 @@ def register(app, day, exact):
         target = day(data['date'])
         action = data['action']
         if action not in ('schedule', 'record') or (action == 'record' and target > today()):
-            raise ValueError('请明确填写预约日或实际完成日')
+            raise FieldError('action' if action not in ('schedule', 'record') else 'date')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             if type(data.get('expected_revision')) is not int or data['expected_revision'] != revision(db):
@@ -261,7 +263,7 @@ def register(app, day, exact):
         exact(data, ['action', 'date', 'version', 'confirm_off_schedule'])
         confirm = data.get('confirm_off_schedule', False)
         if type(confirm) is not bool:
-            raise ValueError('确认字段类型')
+            raise FieldError('confirm_off_schedule')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             old = db.execute('SELECT * FROM treatment_session WHERE id=?', (identifier,)).fetchone()
@@ -277,7 +279,7 @@ def register(app, day, exact):
             if action == 'complete':
                 target = day(data['date'])
                 if target > today():
-                    raise ValueError('未来不能记为完成')
+                    raise FieldError('date')
                 if old['status'] in ('completed', 'cancelled'):
                     abort(409)
                 if db.execute("SELECT 1 FROM treatment_session WHERE id!=? AND actual_date=? AND status='completed'", (identifier, str(target))).fetchone():
@@ -305,7 +307,7 @@ def register(app, day, exact):
                     abort(409)
                 new.update(status='cancelled', actual_date=None)
             else:
-                raise ValueError('未知操作')
+                raise FieldError('action')
             if off and not confirm:
                 return conflict('CONFIRM_REQUIRED', '这一天不在设定的治疗日，需要确认后才会保存。')
             if action in ('postpone', 'reschedule'):

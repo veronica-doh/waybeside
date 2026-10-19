@@ -95,6 +95,8 @@ function decorateLocal(current){
     const button=document.createElement('button');button.className='secondary';button.textContent='备份本机记录';button.onclick=async()=>{try{const response=await api('backup',{});const url=URL.createObjectURL(await response.blob());const a=document.createElement('a');a.href=url;a.download='waybeside-backup.sqlite';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){toast(e.message);}};actions.append(button);main.append(actions);
   }
 }
+// 同一个标签页里换成新的登录链接（只有 # 部分变化）时，重新载入以使用新链接。
+window.addEventListener('hashchange',()=>{if(/^#login=./.test(location.hash))location.reload();});
 window.addEventListener('unhandledrejection',event=>{event.preventDefault();toast(event.reason?.message||'未保存，请重试。');});
 document.querySelector('#reset').onclick=()=>confirmAction('退出本机服务？','记录已保存在本机。关闭后需要重新启动才能继续使用。',async()=>{await api('exit',{});main.replaceChildren();const message=document.createElement('p');message.textContent='本机服务已退出，记录保留。可以关闭窗口。';main.append(message);});
 (async()=>{

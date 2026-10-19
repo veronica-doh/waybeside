@@ -5,7 +5,7 @@ let menuData=null, menuDate=null, menuBusy=false;
 let menuBrowseLimit=MENU_PAGE_SIZE, menuFavoritesOnly=false;
 const menuShoppingDates=new Set();
 const oldDecorate=decorateLocal;
-decorateLocal=function(current){if((current!=='tomorrow'||!menuData?.enabled)&&!['plan','baseline'].includes(current))oldDecorate(current);document.querySelectorAll('.nav a').forEach(link=>link.hidden=false);const badge=document.querySelector('.prototype span');if(badge)badge.textContent=demoMode?'演示数据（虚构） · 不调用模型':'本机私人记录 · 不调用模型';if(menuData?.enabled&&['today','tomorrow','plan','baseline'].includes(current))renderMenu(current==='baseline'?'plan':current);if(menuData&&!menuData.enabled&&['tomorrow','plan','baseline'].includes(current))renderNoMenuLibrary(current);};
+decorateLocal=function(current){if((current!=='tomorrow'||!menuData?.enabled)&&!['plan','baseline'].includes(current))oldDecorate(current);document.querySelectorAll('.nav a').forEach(link=>link.hidden=false);if(menuData?.enabled&&['today','tomorrow','plan','baseline'].includes(current))renderMenu(current==='baseline'?'plan':current);if(menuData&&!menuData.enabled&&['tomorrow','plan','baseline'].includes(current))renderNoMenuLibrary(current);};
 function renderNoMenuLibrary(current){const box=element('section',undefined,'menu-section');box.id='menu-empty';box.append(element('h1',current==='tomorrow'?'准备明天':'我的方案'),element('p','尚未导入菜单库。导入一份菜单文件后，这里才会出现每天的推荐；没有导入前不会生成任何菜单。','menu-state'),importPanel());main.replaceChildren(box);}
 let menuReplaced=false, menuNotice='', menuCandidate=null, candidateSignature='', menuSettings=null;
 // ---- 规则筛选：规则文字、提醒文字一律走 textContent。过敏提醒只作提示，不参与任何筛选。----
@@ -134,8 +134,6 @@ function menuBrowse(shown){
   const rules=element('details');rules.id='menu-recommendation-rules';rules.append(element('summary','推荐是怎么选的？'),element('p','未采用优先，再按最久采用目标日；同层收藏优先，最后按组号。偏好只影响未来的新推荐，不替换已有推荐或草稿。','small'));browse.append(rules);return browse;
 }
 function renderMenu(current){
-  const identity=document.querySelector('.prototype span');
-  if(identity)identity.textContent=(demoMode||menuData.synthetic)?'本地记录 · 虚构数据 · 不自动调用模型':'本机私人记录 · 不调用模型';
   const expected=current==='today'?TODAY:current==='tomorrow'?TOMORROW:menuDate;
   if(expected!==menuDate&&current==='today'){fetchMenu(expected).then(()=>render());return;}
   if(expected!==menuDate){main.replaceChildren(element('p','读取 '+expected+' 的菜单…'));fetchMenu(expected).then(()=>render());return;}
@@ -145,6 +143,7 @@ function renderMenu(current){
   const section=element('section',undefined,'menu-section');section.id='menu-section';
   const dayBadge=element('p',dayLabel(s.target_date),'menu-day'+(s.target_date===TODAY?' is-today':''));dayBadge.id='menu-day-label';
   section.append(dayBadge,element('h1',current==='tomorrow'?'明天，吃得安心。':'我的方案'));
+  if(menuData.synthetic){const note=element('p',t('menu.synthetic_note'),'menu-state');note.id='menu-synthetic-note';section.append(note);}   // 示例菜单只在菜单区域说明，顶部横幅只看是不是演示库
   if(current==='tomorrow'&&menuCandidate?.status==='READY_TO_REVIEW'){const hint=button('电脑上的助手给明天提了一份建议 · 去看看 ↓',()=>{const target=document.getElementById('menu-candidate');target.scrollIntoView({block:'start',behavior:'auto'});target.focus({preventScroll:true});},true,'menu-cand-hint');hint.className='menu-cand-hint';section.append(hint);}
   if(current==='plan'){section.append(element('h2','饮食 · 菜单'));const sw=element('div',undefined,'menu-day-switch');sw.setAttribute('role','group');sw.setAttribute('aria-label','选择日期');
     for(const day of [TODAY,TOMORROW]){const b=button('看'+dayLabel(day)+'的菜单',async()=>{menuNotice='';await fetchMenu(day);render();},true,'menu-day-'+(day===TODAY?'today':'tomorrow'));b.setAttribute('aria-pressed',String(s.target_date===day));sw.append(b);}

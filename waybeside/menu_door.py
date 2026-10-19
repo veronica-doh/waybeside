@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 from flask import abort, jsonify, request
 from . import rules as rule_filter
-from .storage import connect, encode, audit, effective_flags, assistant_mode, questionnaire
+from .storage import FieldError, connect, encode, audit, effective_flags, assistant_mode, questionnaire
 from .menu_library import MEALS, NUTRIENTS, active, frozen, read_day, save_day, recommend, check_locks
 
 class CandidateError(ValueError):
@@ -168,6 +168,7 @@ def export_package(path, target, output=None):
         materialize(db, lib, target, hidden)
         state, _ = read_day(db, target)
         ver = versions(db, lib, target, path)
+        had_ready = db.execute("SELECT 1 FROM menu_candidate WHERE target_date=? AND status='READY_TO_REVIEW'", (target,)).fetchone() is not None
         snap = None
         for row in db.execute("SELECT * FROM menu_candidate WHERE target_date=? AND status='WAITING_EXTERNAL' ORDER BY rowid DESC", (target,)).fetchall():
             old = json.loads(row['snapshot'])
@@ -223,7 +224,11 @@ def export_package(path, target, output=None):
             with destination.open('x', encoding='utf-8') as stream:
                 stream.write(encode(package))
             destination.chmod(0o400)
-    return {'status': 'WAITING_EXTERNAL', 'job_id': snap['job_id'], 'package': str(destination)}
+    result = {'status': 'WAITING_EXTERNAL', 'job_id': snap['job_id'], 'package': str(destination)}
+    if had_ready:
+        # 同一天上一份已提交、人还没看的建议，会被这次的新任务替换：明说，别让助手意外作废。
+        result.update(replaces_pending=True, say='你之前提交、他还没看的那份建议，会被这次的新任务替换，网页上会显示“已作废”。需要的话请重新提交。')
+    return result
 
 def validate(raw, snap, db, lib, state, flags, hidden=()):
     data = decode(raw)
@@ -343,7 +348,7 @@ def register(app):
     def candidate_adopt(identifier):
         data = request.get_json()
         if data != {'confirmed': True}:
-            raise ValueError('必须确认')
+            raise FieldError('confirmed')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             lib = active(db)
@@ -382,7 +387,7 @@ def register(app):
     @app.post('/api/menu/candidate/<identifier>/decline')
     def candidate_decline(identifier):
         if request.get_json() != {}:
-            raise ValueError('不接受额外内容')
+            raise FieldError('body')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT * FROM menu_candidate WHERE id=?', (identifier,)).fetchone()

@@ -11,3 +11,7 @@ node_modules/
 tests/artifacts/
 logs/
 dist/
+
+# 助手导出的健康资料（未加密）：兜底，防止误提交
+dump*.json
+backup*.sqlite*

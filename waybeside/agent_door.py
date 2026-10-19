@@ -29,7 +29,8 @@ SAYS = dict(MODE_SAYS, **{
     'SERVICE_NOT_RUNNING': 'WayBeside 服务没有在运行，请先启动服务。',
     'ROUTE_NOT_ALLOWED': '这个接口不对助手开放，或者接口名写错了。请对照 AGENTS.md 里的接口列表；需要人做的事，请转告他在网页上做。',
     'SHARE_DISABLED': '你还没有开启“菜单库”共享。请到网页「设置 → 导出给助手」里打开它，我才能挑菜单。',
-    'INVALID_JSON': '正文文件不是合法的 JSON，请检查后重试。',
+    'OUTPUT_INSIDE_REPO': '这个输出位置在应用目录或代码仓库里，健康资料不能放在那里。请换到仓库以外的工作目录。',
+    'JOB_NOT_WAITING': '这个任务已经不在等待提交了（可能已经提交过、被新的 export 替换或已失效）。请重新 export。',
     'DEMO_DIR_NOT_SAFE': '演示数据不能放在真实数据目录里，未执行。',
     'OUTPUT_EXISTS': '输出文件已存在，请换一个新文件名。',
     'FILE_OR_DATE_ERROR': '文件或日期不正确。',
@@ -154,6 +155,17 @@ def read_body(source):
     return json.loads(text)
 
 
+APP_DIR = Path(__file__).resolve().parents[1]
+
+
+def output_is_inside_a_repository(output):
+    """输出文件落在应用目录内，或任何 Git 工作区内（向上找 .git）：健康资料不能写到那里。"""
+    target = Path(os.path.realpath(Path(output).expanduser()))
+    if target == APP_DIR or APP_DIR in target.parents:
+        return True
+    return any((folder / '.git').exists() for folder in target.parents)
+
+
 def record_export(path, kind):
     """dump / backup 成功后留一条助手动作的 audit（只记动作名，不记内容），让网页“助手最近做了什么”看得到。"""
     with connect(path) as db:
@@ -193,8 +205,13 @@ def run(args, directory, path):
             raise Failure('SERVICE_NOT_RUNNING', start_command=START_COMMAND)
         # 新码只交给浏览器；本命令不打印、不自己使用。
         url = f"http://127.0.0.1:{info['port']}/#login={login.issue(directory)}"
-        return {'status': 'OK', 'opened': bool(webbrowser.open(url)), 'port': info['port'],
-                'say': '我已经把网页打开了。请你先看免责声明，再选一种使用方式，选好了告诉我。'}
+        try:
+            chosen = mode_of(inspect(path)) != 'unset'
+        except Failure:
+            chosen = False
+        say = ('我已经把网页重新打开了，请在新打开的窗口里继续。' if chosen
+               else '我已经把网页打开了。请你先看免责声明，再选一种使用方式，选好了告诉我。')
+        return {'status': 'OK', 'opened': bool(webbrowser.open(url)), 'port': info['port'], 'say': say}
     meta = inspect(path)
     gate(command, meta)
     extra = check_today(directory)
@@ -203,6 +220,8 @@ def run(args, directory, path):
         return dict(export_package(path, target, args.output), **extra)
     if command == 'submit':
         return dict(submit_candidate(path, args.file), **extra)
+    if command in ('backup', 'dump') and output_is_inside_a_repository(args.output):
+        raise Failure('OUTPUT_INSIDE_REPO')          # 先拦，库和文件系统都不动
     if command == 'backup':
         try:
             backup_database(path, args.output)
@@ -218,7 +237,7 @@ def run(args, directory, path):
         try:
             body = read_body(args.json) if args.json else None
         except json.JSONDecodeError as error:
-            raise Failure('INVALID_JSON') from error
+            raise Failure('INVALID_JSON', line=error.lineno, column=error.colno) from error
         code, payload = call(client, origin, headers, method, args.path, body)
         return dict({'status': code, 'body': payload}, **extra)
     # dump：健康记录全量 = summary ∪ settings（嵌套放置，避免同名字段冲突）。完整迁移请用 backup。

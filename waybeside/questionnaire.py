@@ -11,7 +11,7 @@ import json
 import re
 from datetime import datetime
 from flask import abort, g, jsonify, request
-from .storage import (field, connect, encode, audit, BLOCKS, SHARE_CATEGORIES, is_onboarded, share_flags,
+from .storage import (FieldError, field, connect, encode, audit, BLOCKS, SHARE_CATEGORIES, is_onboarded, share_flags,
                       questionnaire, disclaimer_accepted, assistant_mode, assistant_mode_version)
 from .sessions import apply_course, course_row, public_course, CourseError, conflict
 
@@ -171,10 +171,10 @@ def register(app, day, exact):
         exact(data, ['answers', 'version', 'skipped'])
         skipped = data.get('skipped', False)
         if type(skipped) is not bool or type(data.get('version')) is not int:
-            raise ValueError('请求格式')
+            raise FieldError('version' if type(data.get('version')) is not int else 'skipped')
         answers = data.get('answers', {})
         if not isinstance(answers, dict) or (skipped and answers):
-            raise ValueError('跳过时不能带答案')
+            raise FieldError('answers')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT version FROM questionnaire_answer WHERE block=?', (block,)).fetchone()
@@ -204,7 +204,7 @@ def register(app, day, exact):
         data = request.get_json()
         exact(data, ['accepted'])
         if data.get('accepted') is not True:
-            raise ValueError('需要确认')
+            raise FieldError('accepted')
         if g.actor != 'local-user':
             abort(403)
         with connect(path) as db:
@@ -221,7 +221,7 @@ def register(app, day, exact):
         if g.actor != 'local-user':
             abort(403)
         if not isinstance(data.get('mode'), str) or data['mode'] not in ('menu_only', 'full') or type(data.get('version')) is not int:
-            raise ValueError('方式或版本不正确')
+            raise FieldError('mode' if not isinstance(data.get('mode'), str) or data.get('mode') not in ('menu_only', 'full') else 'version')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             if not disclaimer_accepted(db):
@@ -263,11 +263,11 @@ def register(app, day, exact):
         data = request.get_json()
         exact(data, ['category', 'enabled', 'version'])
         if set(data) != {'category', 'enabled', 'version'}:
-            raise ValueError('缺少字段')
+            raise FieldError(', '.join(sorted({'category', 'enabled', 'version'} - set(data))))
         if not isinstance(data['category'], str) or data['category'] not in SHARE_CATEGORIES:
-            raise ValueError('未知类别')
+            raise FieldError('category')
         if type(data['enabled']) is not bool:
-            raise ValueError('enabled 必须是布尔值')
+            raise FieldError('enabled')
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT * FROM agent_share WHERE category=?', (data['category'],)).fetchone()

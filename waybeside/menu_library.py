@@ -8,7 +8,7 @@ import math
 import re
 from pathlib import Path
 from flask import abort, g, jsonify, request
-from .storage import connect, encode, audit
+from .storage import FieldError, connect, encode, audit
 from . import rules as rule_filter
 
 MEALS = ('早餐', '上午加餐', '午餐', '下午加餐', '晚餐')
@@ -19,55 +19,55 @@ NUTRIENTS = ('energy_kcal', 'protein_g', 'fat_g', 'carbohydrate_g', 'fibre_g')
 
 def number(value, positive=False):
     if type(value) not in (int, float) or not math.isfinite(value) or (value <= 0 if positive else value < 0):
-        raise ValueError('数值范围')
+        raise FieldError('menu')
 
 def validate(data):
     if not isinstance(data, dict) or not isinstance(data.get('version'), str) or not data['version'].strip():
-        raise ValueError('缺少版本')
+        raise FieldError('menu')
     foods = data['food_reference']['foods']
     if not isinstance(foods, dict) or not foods:
-        raise ValueError('缺少食材')
+        raise FieldError('menu')
     for food in foods.values():
         if not isinstance(food,dict) or not isinstance(food.get('per_100g'),dict):
-            raise ValueError('食材结构')
+            raise FieldError('menu')
         for key in ('name', 'weight_basis'):
             if not isinstance(food.get(key), str) or not food[key].strip():
-                raise ValueError('名称或重量口径')
+                raise FieldError('menu')
         if not isinstance(food.get('source'), (str, dict)) or not food['source']:
-            raise ValueError('缺少来源')
+            raise FieldError('menu')
         for key in NUTRIENTS:
             if food['per_100g'][key] is not None:
                 number(food['per_100g'][key])
         if 'tags' in food:
             tags = food['tags']
             if not isinstance(tags, list) or len(tags) > 20 or any(not isinstance(t, str) or not TAG.match(t) for t in tags):
-                raise ValueError('食材标签')
+                raise FieldError('menu')
     days = data['days']
     if not isinstance(days, list) or len(days) < 1:
-        raise ValueError('菜单里至少要有一组')
+        raise FieldError('menu')
     ids = set()
     for group in days:
         if not isinstance(group,dict):
-            raise ValueError('菜单组结构')
+            raise FieldError('menu')
         gid = group['group_id']
         if type(gid) not in (str, int) or not str(gid).strip() or str(gid) in ids:
-            raise ValueError('组号必须唯一')
+            raise FieldError('menu')
         ids.add(str(gid))
         meals = group['meals']
         if not isinstance(meals,list) or any(not isinstance(m,dict) for m in meals):
-            raise ValueError('餐次结构')
+            raise FieldError('menu')
         if len(meals) != 5 or {m['meal'] for m in meals} != set(MEALS):
-            raise ValueError('必须五个不同餐次')
+            raise FieldError('menu')
         for meal in meals:
             if not isinstance(meal.get('title'), str) or not meal['title'].strip() or not isinstance(meal.get('steps'), (list, str)):
-                raise ValueError('缺少餐名或步骤')
+                raise FieldError('menu')
             if not isinstance(meal['ingredients'], list) or not meal['ingredients']:
-                raise ValueError('缺少份量')
+                raise FieldError('menu')
             for item in meal['ingredients']:
                 if not isinstance(item,dict):
-                    raise ValueError('食材份量结构')
+                    raise FieldError('menu')
                 if item['food_id'] not in foods:
-                    raise ValueError('未知食材')
+                    raise FieldError('menu')
                 number(item['g'], True)
             for key in NUTRIENTS:
                 values=[foods[x['food_id']]['per_100g'][key] for x in meal['ingredients']]
@@ -84,7 +84,7 @@ def load_file(path):
         result = {}
         for key, value in pairs:
             if key in result:
-                raise ValueError('重复JSON键')
+                raise FieldError('menu')
             result[key] = value
         return result
     return validate(json.loads(Path(path).read_text(encoding='utf-8'), object_pairs_hook=unique))
@@ -130,7 +130,7 @@ def frozen(library,gid):
     data=json.loads(library['content'])
     group=next((g for g in data['days'] if str(g['group_id'])==str(gid)),None)
     if not group:
-        raise ValueError('未知组号')
+        raise FieldError('group_id')
     group=copy.deepcopy(group)
     group['group_id']=str(group['group_id'])
     foods=data['food_reference']['foods']
@@ -181,7 +181,7 @@ def register(app):
         return app.config.get('TODAY') or date.today().isoformat()
     def target_day(value):
         if not isinstance(value,str) or date.fromisoformat(value).isoformat()!=value:
-            raise ValueError('日期格式')
+            raise FieldError('target_date')
         return value
     def payload(db,target,lib):
         state,rev=read_day(db,target)
@@ -201,7 +201,7 @@ def register(app):
     def import_confirm():
         data=request.get_json()
         if set(data)!={'menu','digest','expected','confirmed'} or data['confirmed'] is not True or digest(data['menu'])!=data['digest']:
-            raise ValueError('必须确认同一份预览')
+            raise FieldError('confirmed')
         try:
             return jsonify(import_library(path,data['menu'],expected=data['expected']))
         except ValueError as error:
@@ -234,7 +234,7 @@ def register(app):
     def action():
         data=request.get_json()
         if set(data)-{'action','target_date','revision','library_hash','group_id','meal','status','note','locked','favorite','avoided','rule_confirmed'}:
-            raise ValueError('未知字段')
+            raise FieldError(', '.join(sorted(str(k) for k in set(data)-{'action','target_date','revision','library_hash','group_id','meal','status','note','locked','favorite','avoided','rule_confirmed'})[:5]))
         target=target_day(data['target_date'])
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
@@ -248,7 +248,7 @@ def register(app):
             op=data['action']
             if op in ('select','adopt'):
                 if target<today():
-                    raise ValueError('历史日期不能重新选用')
+                    raise FieldError('target_date')
                 group=frozen(lib,data['group_id'])
                 hidden_group=group['group_id'] in rule_filter.context(db,path,lib)['result']['excluded']
                 if hidden_group and data.get('rule_confirmed') is not True:
@@ -281,33 +281,33 @@ def register(app):
             elif op in ('lock','actual'):
                 meal=data['meal']
                 if meal not in MEALS:
-                    raise ValueError('未知餐次')
+                    raise FieldError('meal')
                 if op=='lock':
                     if type(data['locked']) is not bool:
-                        raise ValueError('锁定类型')
+                        raise FieldError('locked')
                     if data['locked'] and not state['adopted']:
-                        raise ValueError('先采用再锁餐')
+                        raise FieldError('locked')
                     state['locks'][meal]=data['locked']
                 else:
                     if target>today():
-                        raise ValueError('未来事实')
+                        raise FieldError('target_date')
                     if state['locks'].get(meal):
                         abort(409)
                     if data['status'] not in ('unknown','done','partial','other','not_done'):
-                        raise ValueError('实际状态')
+                        raise FieldError('status')
                     note=data.get('note','')
                     if not isinstance(note,str) or len(note)>500:
-                        raise ValueError('备注长度')
+                        raise FieldError('note')
                     state['actual'][meal]={'status':data['status'],'note':note,'menu_snapshot':state['adopted'],'intake_nutrition':None}
                     state['locks'][meal]=True
             elif op=='preference':
                 frozen(lib,data['group_id'])
                 if type(data['favorite']) is not bool or type(data['avoided']) is not bool:
-                    raise ValueError('偏好类型')
+                    raise FieldError('favorite')
                 db.execute('INSERT INTO menu_preference VALUES(?,?,?) ON CONFLICT(group_id) DO UPDATE SET favorite=excluded.favorite,avoided=excluded.avoided',
                     (str(data['group_id']),data['favorite'],data['avoided']))
             else:
-                raise ValueError('未知操作')
+                raise FieldError('action')
             save_day(db,target,state,rev)
             audit(db,'menu_'+op,target,before,state)
             return jsonify(payload(db,target,lib))
@@ -316,14 +316,14 @@ def register(app):
     def shopping():
         dates=request.args.getlist('date')
         if not dates:
-            raise ValueError('请选择已采用日期')
+            raise FieldError('date')
         result={}
         with connect(path) as db:
             for target in sorted(set(dates)):
                 target_day(target)
                 state,_=read_day(db,target)
                 if not state['adopted']:
-                    raise ValueError('该日期未采用')
+                    raise FieldError('date')
                 for meal in state['adopted']['meals']:
                     for item in meal['ingredients']:
                         key=(item['food_id'],item['food']['weight_basis'],item['unit'])

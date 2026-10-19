@@ -29,7 +29,6 @@ function group(id){return {group_id:id,library_hash:'test',library_version:'test
     context.fixture={enabled:true,synthetic:false,groups:Array.from({length:20},(_,i)=>group(String(i+1).padStart(2,'0'))),preferences:[],history:[],
       state:{target_date:target,library_hash:'test',adopted:group('01'),draft:group('02'),recommendation:{group_id:'01'},locks:{},actual:{},previous:[null]}};
     vm.runInContext(`menuData=fixture;menuDate=fixture.state.target_date;renderMenu('${page}');`,context);
-    assert.equal(identity.textContent,'本机私人记录 · 不调用模型');
     if(page==='today'){assert(!flatten(main).some(n=>n.className==='menu-group-view'||n.className==='menu-meal'),'首页不展开五餐');continue;}
     const nodes=flatten(main),draft=nodes.find(n=>n.attrs['data-menu-role']==='draft'),adopted=nodes.find(n=>n.attrs['data-menu-role']==='adopted');
     assert.equal(draft.attrs['data-group-id'],'02');assert.equal(adopted.attrs['data-group-id'],'01');
@@ -50,7 +49,8 @@ function group(id){return {group_id:id,library_hash:'test',library_version:'test
   }
   await context.nextMenuGroup();assert.equal(context.lastAction.action,'select');assert.equal(context.lastAction.group_id,'03');
   vm.runInContext(`menuData.synthetic=true;renderMenu('plan');`,context);
-  assert.equal(identity.textContent,'本地记录 · 虚构数据 · 不自动调用模型');
+  assert(flatten(main).some(n=>n.id==='menu-synthetic-note'),'示例菜单只在菜单区域标注');
+  assert.equal(identity.textContent,'','菜单页不再改顶部横幅');
   context.render=()=>vm.runInContext("renderMenu('plan');",context);
   for(const expected of [12,18,19]){
     await flatten(main).find(n=>n.id==='menu-show-more').onclick();

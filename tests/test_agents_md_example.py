@@ -5,6 +5,7 @@
   sh any / full / menu_only 助手命令，按方式分章
   json <文件名> / python <文件名>   命令引用的文件，测试把它们原样写进工作目录
 唯一的替换：解释器 .venv/bin/python -> 当前解释器；启动命令里的端口 8765 -> 一个空闲端口。
+命令在应用目录里执行，文件都放在 $WORK（测试里是临时目录），不往仓库里写任何东西。
 """
 import json
 import os
@@ -110,12 +111,10 @@ def world(request, tmp_path):
     for lang, tag, body in blocks():
         if lang in ('json', 'python') and tag:
             (work / tag).write_text(body, encoding='utf8')
-    (work / 'examples/menu').mkdir(parents=True)
-    shutil.copy(ROOT / 'examples/menu/demo-menu-fictional.json', work / 'examples/menu/demo-menu-fictional.json')
     shim = tmp_path / 'browser.sh'
     shim.write_text('#!/bin/sh\nprintf "%s" "$1" > "$URL_FILE"\n')
     shim.chmod(shim.stat().st_mode | stat.S_IEXEC)
-    env = dict(os.environ, WAYBESIDE_DATA_DIR=str(data), WAYBESIDE_TODAY=TODAY, PYTHONPATH=str(ROOT),
+    env = dict(os.environ, WORK=str(work), WAYBESIDE_DATA_DIR=str(data), WAYBESIDE_TODAY=TODAY, PYTHONPATH=str(ROOT),
                BROWSER=str(shim), URL_FILE=str(tmp_path / 'url.txt'), PYTHONDONTWRITEBYTECODE='1')
     # 文档里的启动命令，真实起一个服务进程（只替换端口）。
     (start,) = [line for _, line in commands('start')]
@@ -143,7 +142,7 @@ def sh(world, line, split_pipeline=False):
     if split_pipeline:
         line = re.split(r' \| | > ', line)[0]
     command = line.replace(PYTHON, shlex.quote(sys.executable))
-    r = subprocess.run(['/bin/bash', '-c', 'set -o pipefail; ' + command], cwd=world['work'], env=world['env'],
+    r = subprocess.run(['/bin/bash', '-c', 'set -o pipefail; ' + command], cwd=ROOT, env=world['env'],
                        capture_output=True, text=True)
     return r
 

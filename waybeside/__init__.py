@@ -22,10 +22,13 @@ FIELDS = {
     'energy': {'unknown', '还可以', '有点累', '想多休息'},
 }
 
-def day(value):
-    if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
-        raise ValueError('日期格式不正确')
-    return date.fromisoformat(value)
+def day(value, name='date'):
+    try:
+        if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
+            raise ValueError('日期格式不正确')
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise FieldError(name) from error
 
 def exact(data, keys):
     if not isinstance(data, dict):
@@ -34,9 +37,9 @@ def exact(data, keys):
     if unknown:
         raise FieldError(', '.join(unknown[:5]))     # 只报多出来的字段名，不报值
 
-def text(value, limit):
+def text(value, limit, name='note'):
     if not isinstance(value, str) or len(value) > limit:
-        raise ValueError('文字类型或长度不正确')
+        raise FieldError(name)
     return value
 
 def create_app(db_path, port=8765, token=None, today=None, actor='local-user', migrate=True, issue_code=True):
@@ -100,9 +103,15 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
     def invalid_field(error):
         return jsonify(code='INVALID_FIELD', field=error.field, error='资料不符合记录约束，请检查日期、字段、版本和关联。'), 400
 
+    @app.errorhandler(KeyError)
+    def missing_key(error):
+        name = error.args[0] if error.args and isinstance(error.args[0], str) and error.args[0].isidentifier() else None
+        if name is None:
+            return invalid(error)
+        return jsonify(code='INVALID_FIELD', field=name, error='资料不符合记录约束，请检查日期、字段、版本和关联。'), 400
+
     @app.errorhandler(ValueError)
     @app.errorhandler(TypeError)
-    @app.errorhandler(KeyError)
     @app.errorhandler(sqlite3.IntegrityError)
     def invalid(error):
         return jsonify(error='资料不符合记录约束，请检查日期、字段、版本和关联。'), 400
@@ -148,26 +157,27 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
         exact(data, [*FIELDS, 'id','version','date','time','session','minutes','note','symptoms'])
         observed = day(data['date'])
         if observed > day(current_day()):
-            raise ValueError('不能记录未来事实')
-        clock = text(data['time'], 5)
-        datetime.strptime(clock, '%H:%M')
+            raise FieldError('date')
+        clock = text(data['time'], 5, 'time')
+        with field('time'):
+            datetime.strptime(clock, '%H:%M')
         if len(clock) != 5:
-            raise ValueError('时间格式')
+            raise FieldError('time')
         content = {k: data.get(k, 'unknown') for k in FIELDS}
         # 症状条目由用户自选自加：名称为用户自填文字（≤20 字，最多 20 项），状态只有 未记录/没有/有。
         symptoms = data.get('symptoms', {})
         if not isinstance(symptoms, dict) or len(symptoms) > 20:
-            raise ValueError('症状条目')
+            raise FieldError('symptoms')
         for name, state in symptoms.items():
             if not 1 <= len(name.strip()) <= 20 or name != name.strip() or not isinstance(state, str) or state not in ('unknown', 'none', 'some'):
-                raise ValueError('症状条目')
+                raise FieldError('symptoms')
         content['symptoms'] = symptoms
         for k, values in FIELDS.items():
             if content[k] not in values:
                 raise FieldError(k)
         minutes = data.get('minutes', '')
         if minutes != '' and (not isinstance(minutes, str) or not minutes.isdigit() or not 0 <= int(minutes) <= 1440):
-            raise ValueError('分钟数格式')
+            raise FieldError('minutes')
         session_id = int(data['session']) if data.get('session') else None
         content.update(date=str(observed), time=clock, session=str(session_id) if session_id else '',
                        minutes=minutes, note=text(data.get('note',''),500))
@@ -175,7 +185,7 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
         with connect(db_path) as db:
             db.execute('BEGIN IMMEDIATE')
             if session_id and not db.execute('SELECT 1 FROM treatment_session WHERE id=?',(session_id,)).fetchone():
-                raise ValueError('没有这条治疗记录')
+                raise FieldError('session')
             old = db.execute('SELECT * FROM observation WHERE id=?', (identifier,)).fetchone()
             if data.get('id') and (not old or old['kind'] != 'daily' or type(data.get('version')) is not int or old['version'] != data.get('version')):
                 abort(409)
@@ -189,36 +199,44 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
     def auxiliary():
         data = request.get_json()
         exact(data, ['labs','question','rhythm','celebration','version'])
-        text(data['question'],1200)
+        for name in ('labs','question','rhythm','celebration','version'):
+            if name not in data:
+                raise FieldError(name)         # 五项都是必填
+        text(data['question'],1200,'question')
         if type(data['celebration']) is not bool:
-            raise ValueError('设置格式')
+            raise FieldError('celebration')
+        if not isinstance(data['rhythm'], dict):
+            raise FieldError('rhythm')
         exact(data['rhythm'], ['blood','chemistry'])
         # 检查节奏由用户自填天数（1-365），留空即未设置；不内置任何医学节奏。
         for key in ('blood','chemistry'):
             value=data['rhythm'].get(key)
             if value is not None and (type(value) is not int or not 1<=value<=365):
-                raise ValueError('节奏格式')
+                raise FieldError('rhythm')
         if not isinstance(data['labs'],list) or len(data['labs'])>1000:
-            raise ValueError('检查条数')
+            raise FieldError('labs')
         for row in data['labs']:
-            exact(row,['date','metric','unit','lab','value','low','high'])
-            if day(row['date'])>day(current_day()):
-                raise ValueError('未来检查')
-            if not text(row['metric'],40).strip():
-                raise ValueError('指标')   # 检验指标名由用户自填（≤40 字），不设白名单
+            if not isinstance(row, dict) or set(row) != {'date','metric','unit','lab','value','low','high'}:
+                raise FieldError('labs')
+            if day(row['date'],'labs')>day(current_day()):
+                raise FieldError('labs')
+            if not text(row['metric'],40,'labs').strip():
+                raise FieldError('labs')   # 检验指标名由用户自填（≤40 字），不设白名单
             for key,limit in (('unit',30),('lab',60)):
-                if not text(row[key],limit).strip():
-                    raise ValueError('必填')
+                if not text(row[key],limit,'labs').strip():
+                    raise FieldError('labs')
             for key in ('value','low','high'):
                 value=row[key]
                 if value is not None and (type(value) not in (int,float) or not 0<=value<1e9):
-                    raise ValueError('数值')
+                    raise FieldError('labs')
             if (row['low'] is None)!=(row['high'] is None) or (row['low'] is not None and row['low']>row['high']):
-                raise ValueError('区间')
+                raise FieldError('labs')
         with connect(db_path) as db:
             db.execute('BEGIN IMMEDIATE')
             old=db.execute("SELECT * FROM observation WHERE id='aux'").fetchone()
-            if type(data.get('version')) is not int or data['version']!=(old['version'] if old else 0):
+            if type(data.get('version')) is not int:
+                raise FieldError('version')
+            if data['version']!=(old['version'] if old else 0):
                 abort(409)
             version=(old['version'] if old else 0)+1
             content={k:v for k,v in data.items() if k!='version'}

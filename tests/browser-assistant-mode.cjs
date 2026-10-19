@@ -170,7 +170,7 @@ async function openToModePage({p,url,shot,stage,wait,noOverflow,api,tag}){
       await nav('labs');
       add(tag+'-mark-lab','每条检验标「助手记录」',(await p.locator('.table-scroll tbody tr').first().innerText()).includes('助手记录'),await p.locator('.table-scroll tbody tr').first().innerText());
       await nav('course');
-      add(tag+'-mark-day','「往日几页」里助手记的那天标「助手记录」',await p.locator(`.past article[data-date="${TODAY}"] .agent-mark`).count()===1,'');
+      add(tag+'-mark-day','「已经记下的日子」里助手记的那天标「助手记录」',await p.locator(`.past article[data-date="${TODAY}"] .agent-mark`).count()===1,'');
       const done=await p.locator('#done-group').textContent();
       add(tag+'-mark-session','治疗完成标「助手记录」，非治疗日完成另有一行说明',done.includes('助手记录')&&done.includes('助手把一个不在治疗日的日子记成了完成。'),done.slice(0,200));
       await nav('record');

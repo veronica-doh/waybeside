@@ -19,7 +19,7 @@ from waybeside.storage import connect
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = '2032-01-01'           # TODAY 的次日
 MODES = ('unset', 'menu_only', 'full')
-NOT_CHOSEN = '请打开 WayBeside 的网页，在第一页选一下你希望我帮你做多少。'
+NOT_CHOSEN = '请打开「伴程」的网页，先看一下免责声明，再选一下你希望我帮你做多少。'
 NOT_ALLOWED = '你选的是自己记录、我只帮挑菜单，所以这件事要你在网页上做。想换方式可以在设置里改。'
 
 

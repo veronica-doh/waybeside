@@ -61,7 +61,7 @@ python3.11 -m venv .venv
 - 用法：`api <GET|POST> <路径> [--json 文件]`。路径里可以带查询参数，例如 `/api/menu?date=2026-10-21`；POST 的正文放进 JSON 文件。`summary` 的附件会解析成 JSON 放进 `body`。
 - 输出 `{"status": HTTP码, "body": ..., ...}`；非 2xx 退出码为 2。存储正忙时返回 `STORAGE_BUSY`，等一会儿重试。
 - 可用的接口：`state`、`observations`、`aux`、`summary`、`course`、`course/generate`、`sessions`、`sessions/<id>`、`onboarding/<块>`、`settings`、`menu`、`menu/action`、`menu/shopping`、`menu/import-preview`、`menu/import-confirm`、`menu/candidate`（及其 adopt / decline）。其中 `aux` 只能写（POST），检验的读取在 `api GET /api/state` 里（`observation` 中 `id` 为 `aux` 的那一项）。其余（登录、免责、选方式、共享开关、网页备份、退出）一律返回 `ROUTE_NOT_ALLOWED`。
-- 例子里的临时文件（正文 JSON、下面两个小脚本、`dump.json`、`backup.sqlite`）请放在一个**不在应用目录、也不在任何 Git 仓库里**的工作目录，用 `--json`、`--output` 指向它们；命令本身在应用目录里执行。健康资料不要落进代码仓库。
+- 例子里的临时文件（正文 JSON、下面两个小脚本、`dump.json`、`backup.sqlite`）都放在 `$WORK` 里。**先设好这个变量**，指向一个**不在应用目录、也不在任何 Git 仓库里**的工作目录（例如 `export WORK="$HOME/waybeside-work"`，再 `mkdir -p "$WORK"`；Windows 的写法不同，请自行换成等价的路径）。把下面各个代码块里出现的 JSON、脚本按名字存进 `$WORK`。命令本身在应用目录里执行。健康资料不要落进代码仓库：`dump` 和 `backup` 的 `--output` 如果落在应用目录或任何 Git 工作区里，会被拒绝，返回 `OUTPUT_INSIDE_REPO`。
 - **先读后写。** 每个写接口都带版本号（`version`、`settings_version` 或 `expected_revision`），数字取自刚读到的 `state` 或 `settings`；返回 409 说明人或别处刚改过，重新读，不要硬覆盖。
 - 下面例子里的数字，对应一个刚做完上面前几步的全新库；真实库里一律以你刚读到的为准。例子里的日期假定“今天”是 2026-10-20。
 
@@ -76,7 +76,7 @@ python3.11 -m venv .venv
 | `helper_mode`（必填，谁在用） | `self`（本人自己用）、`with_helper`（有他人帮忙一起记，例如家属代为记录） |
 | `age_band` | `under_18`、`18_39`、`40_64`、`65_plus` |
 | `sleep_usual` | `regular`、`irregular`、`unknown` |
-| `activity_usual` | `none`、`light`、`regular` |
+| `activity_usual` | `none`、`light`、`regular`；说不清时写 `{"unknown": true}`（`sleep_usual` 也可以这样写） |
 | `meditation_usual` | `{"time": "07:30", "minutes": 15}`（`time` 的格式是 `HH:MM`，`minutes` 是 0 到 180 的整数，两项都要给，可以是 `null`） |
 | 每日记录里的 `diet`、`exercise`、`meditation` | `unknown`、`done`、`partial`、`not_done` |
 | 每日记录里的 `sleep` | `unknown`、`good`、`poor` |
@@ -104,10 +104,10 @@ python3.11 -m venv .venv
 
 ```sh full
 .venv/bin/python -m waybeside.agent_door api GET /api/settings
-.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/basic --json basic.json
-.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/treatment --json treatment.json
-.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/diet --json diet.json
-.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/habit --json habit.json
+.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/basic --json "$WORK/basic.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/treatment --json "$WORK/treatment.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/diet --json "$WORK/diet.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/onboarding/habit --json "$WORK/habit.json"
 ```
 
 要整块跳过：`{"answers": {}, "version": 0, "skipped": true}`。治疗类型 `radiotherapy` / `chemotherapy` / `other`，计数 `session`（次）/ `cycle`（周期），排期 `weekdays`（每周固定几天，`weekdays` 里 0 是周一）/ `manual`（逐次添加）。标签只能是内置词表或这个人自加的标签。**过敏提醒是人的原话，不是过敏原数据**，见“护栏”。
@@ -130,9 +130,9 @@ python3.11 -m venv .venv
 
 ```sh full
 .venv/bin/python -m waybeside.agent_door api GET /api/state
-.venv/bin/python -m waybeside.agent_door api POST /api/course/generate --json generate.json
-.venv/bin/python -m waybeside.agent_door api POST /api/sessions/1 --json complete.json
-.venv/bin/python -m waybeside.agent_door api POST /api/course --json course.json
+.venv/bin/python -m waybeside.agent_door api POST /api/course/generate --json "$WORK/generate.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/sessions/1 --json "$WORK/complete.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/course --json "$WORK/course.json"
 ```
 
 - `sessions/<id>` 的 `action`：`complete`（标记做完，要带实际日期）、`correct`（更正误记的完成）、`reschedule`（改日期）、`cancel`、`restore`。新增预约和补记用 `POST /api/sessions`，正文 `{"action": "schedule", "date": "2026-10-26", "expected_revision": 1}`（补记已发生的完成把 `schedule` 换成 `record`）。
@@ -147,15 +147,15 @@ python3.11 -m venv .venv
 {"date": "2026-10-20", "time": "20:30", "diet": "done", "sleep": "good", "mood": "平静", "energy": "还可以", "exercise": "partial", "meditation": "done", "minutes": "15", "note": "示例备注", "symptoms": {"食欲": "none", "疲劳": "some"}}
 ```
 
-检验在 `aux` 里，是**整表覆盖**：把现有的检验行都带上再加新的，否则会丢掉旧的。新增和改动的行会标「助手记录」，没动的行保持原样。`version` 取自 `state` 里 `aux` 那一条（没有就是 0）。
+检验在 `aux` 里，是**整表覆盖**：把现有的检验行都带上再加新的，否则会丢掉旧的。**五个字段都是必填**：`labs`（检验行的列表，可以是空列表 `[]`）、`question`（复诊想问的问题，文字，可以是空字符串）、`rhythm`（检查节奏，写成 `{"blood": 天数或 null, "chemistry": 天数或 null}`，天数是 1 到 365 的整数，不确定就写 `null`）、`celebration`（是否在打卡完成时显示一句祝贺，`true` 或 `false`；没有人要求就沿用现有值，新库写 `true`）、`version`。缺哪个，返回 `INVALID_FIELD`，`body.field` 就是哪个。每个检验行必须正好有这七项：`date`、`metric`、`unit`、`lab`、`value`、`low`、`high`（`value`、`low`、`high` 可以是 `null`，但 `low` 和 `high` 要么都有、要么都是 `null`）。新增和改动的行会标「助手记录」，没动的行保持原样。`version` 取自 `state` 里 `aux` 那一条（没有就是 0）。
 
 ```json labs.json
 {"labs": [{"date": "2026-10-19", "metric": "示例指标 A", "unit": "示例单位", "lab": "虚构实验室", "value": 12, "low": 10, "high": 20}], "question": "复诊想问的示例问题", "rhythm": {"blood": 14, "chemistry": null}, "celebration": true, "version": 0}
 ```
 
 ```sh full
-.venv/bin/python -m waybeside.agent_door api POST /api/observations --json observation.json
-.venv/bin/python -m waybeside.agent_door api POST /api/aux --json labs.json
+.venv/bin/python -m waybeside.agent_door api POST /api/observations --json "$WORK/observation.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/aux --json "$WORK/labs.json"
 ```
 
 ### 菜单：导入、选、采用
@@ -182,12 +182,12 @@ print(json.dumps({"menu": menu, "digest": preview["digest"], "expected": preview
 ```
 
 ```sh full
-.venv/bin/python -m waybeside.agent_door api POST /api/menu/import-preview --json examples/menu/demo-menu-fictional.json | .venv/bin/python build_confirm.py examples/menu/demo-menu-fictional.json > confirm.json
-.venv/bin/python -m waybeside.agent_door api POST /api/menu/import-confirm --json confirm.json
+.venv/bin/python -m waybeside.agent_door api POST /api/menu/import-preview --json examples/menu/demo-menu-fictional.json | .venv/bin/python "$WORK/build_confirm.py" examples/menu/demo-menu-fictional.json > "$WORK/confirm.json"
+.venv/bin/python -m waybeside.agent_door api POST /api/menu/import-confirm --json "$WORK/confirm.json"
 .venv/bin/python -m waybeside.agent_door api GET "/api/menu?date=2026-10-21"
-.venv/bin/python -m waybeside.agent_door api POST /api/menu/action --json select.json
+.venv/bin/python -m waybeside.agent_door api POST /api/menu/action --json "$WORK/select.json"
 .venv/bin/python -m waybeside.agent_door api GET "/api/menu?date=2026-10-21"
-.venv/bin/python -m waybeside.agent_door api POST /api/menu/action --json adopt.json
+.venv/bin/python -m waybeside.agent_door api POST /api/menu/action --json "$WORK/adopt.json"
 ```
 
 - 被人的规则筛选隐藏的组，选或采用时要带 `"rule_confirmed": true`。这只是意图标记；带了以后网页会写明“助手采用了被你的规则隐藏的组”。只在人明确要看或要用那一组时才带。
@@ -199,8 +199,8 @@ print(json.dumps({"menu": menu, "digest": preview["digest"], "expected": preview
 `dump` 把健康记录全量写成一个新文件（`dump` 和 `backup` 也会出现在网页的“助手最近做了什么”里，只写动作名和日期）（`summary` 加 `settings`，含检验、问卷和备注）；**完整迁移用 `backup`**，它写一份一致性的数据库备份。两个都只能写到不存在的新文件，同名已存在会返回 `OUTPUT_EXISTS`，输出里有路径和 `sha256`。
 
 ```sh full
-.venv/bin/python -m waybeside.agent_door dump --output dump.json
-.venv/bin/python -m waybeside.agent_door backup --output backup.sqlite
+.venv/bin/python -m waybeside.agent_door dump --output "$WORK/dump.json"
+.venv/bin/python -m waybeside.agent_door backup --output "$WORK/backup.sqlite"
 ```
 
 这两个文件含完整的健康资料且没有加密：放在人指定的地方，不要上传、不要提交到 Git。
@@ -211,9 +211,9 @@ print(json.dumps({"menu": menu, "digest": preview["digest"], "expected": preview
 
 ```sh menu_only
 .venv/bin/python -m waybeside.agent_door export
-.venv/bin/python -m waybeside.agent_door export --date 2026-10-21 --output package.json
-.venv/bin/python make_candidate.py package.json candidate.json
-.venv/bin/python -m waybeside.agent_door submit candidate.json
+.venv/bin/python -m waybeside.agent_door export --date 2026-10-21 --output "$WORK/package.json"
+.venv/bin/python "$WORK/make_candidate.py" "$WORK/package.json" "$WORK/candidate.json"
+.venv/bin/python -m waybeside.agent_door submit "$WORK/candidate.json"
 ```
 
 默认目标日为本机明天；不指定 `--output` 时输出到数据目录的 `agent_inbox/任务ID.json`，命令返回的 `package` 是文件路径；指定的 `--output` 必须是新文件。重复 export 复用同日未失效的等待任务。**注意：你提交了建议（`READY_TO_REVIEW`）、人还没看的时候，再对同一天 export 一次，会开出新的等待任务，之前那份待审建议就作废了，要重新提交；网页上会写明“之前的建议已作废”。** 想让人看到你已经提交的建议，就不要再 export 同一天。**程序升级后，之前的等待任务都会失效，先重新 export。**

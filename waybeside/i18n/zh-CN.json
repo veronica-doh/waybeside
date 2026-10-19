@@ -90,6 +90,7 @@
   "menu.candidate_tail.menu_only": "你确认之前，菜单不会改动。",
   "menu.import_copy.full": "选择一个 menu.json 文件。我们先检查菜单是否完整；你选了让助手全部打理，助手也可以替你确认导入。已采用过的菜单会保留原样，换新菜单库不会改动历史。",
   "menu.import_copy.menu_only": "选择一个 menu.json 文件。我们先检查菜单是否完整，再请你确认。已采用过的菜单会保留原样，换新菜单库不会改动历史。",
+  "menu.synthetic_note": "这是示例菜单（虚构的），只用来演示，不是营养建议。",
   "mode.cancel": "先不改",
   "mode.continue": "就选这一种",
   "mode.full.does": "记录每天的情况、录入检验结果、定好明天的菜单、标记哪次治疗做完了",
