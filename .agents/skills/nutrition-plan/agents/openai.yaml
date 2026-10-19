@@ -1,0 +1,7 @@
+# 可选，宿主专用：仅供支持此元数据格式的宿主读取；删除本文件不影响技能本身。
+interface:
+  display_name: "饮食方案与交付验收"
+  short_description: "生成或调整个体化餐单，自动核算营养、检查多样性与医嘱边界，修正后交付"
+  default_prompt: "使用 $nutrition-plan 生成或调整饮食方案，并自行完成核算、验收和必要修正后交付。"
+policy:
+  allow_implicit_invocation: true

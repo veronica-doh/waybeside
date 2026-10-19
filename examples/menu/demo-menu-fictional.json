@@ -1,0 +1,347 @@
+{
+  "version": "demo-fictional-v1",
+  "fictional": true,
+  "role": "虚构示例菜单库",
+  "purpose": "仅用于演示与测试，非饮食建议",
+  "weight_rules": "演示称重",
+  "limitations": "数值为虚构，不对应任何真实食物，不是医疗建议",
+  "food_reference": {
+    "foods": {
+      "demo_grain": {
+        "name": "演示主食",
+        "weight_basis": "cooked_edible",
+        "source": "虚构数值，仅供演示",
+        "per_100g": {
+          "energy_kcal": 120,
+          "protein_g": 3,
+          "fat_g": 1,
+          "carbohydrate_g": 25,
+          "fibre_g": 1
+        }
+      },
+      "demo_veg": {
+        "name": "演示蔬菜",
+        "weight_basis": "raw_edible",
+        "source": "虚构数值，仅供演示",
+        "per_100g": {
+          "energy_kcal": 25,
+          "protein_g": 2,
+          "fat_g": 0.2,
+          "carbohydrate_g": 4,
+          "fibre_g": 2
+        }
+      },
+      "demo_protein": {
+        "name": "演示蛋白食材",
+        "weight_basis": "cooked_edible",
+        "source": "虚构数值，仅供演示",
+        "per_100g": {
+          "energy_kcal": 150,
+          "protein_g": 20,
+          "fat_g": 7,
+          "carbohydrate_g": 1,
+          "fibre_g": 0
+        }
+      },
+      "demo_fruit": {
+        "name": "演示水果",
+        "weight_basis": "raw_edible",
+        "source": "虚构数值，仅供演示",
+        "per_100g": {
+          "energy_kcal": 50,
+          "protein_g": 0.5,
+          "fat_g": 0.2,
+          "carbohydrate_g": 12,
+          "fibre_g": 2
+        }
+      },
+      "demo_drink": {
+        "name": "演示饮品",
+        "weight_basis": "ready_to_eat",
+        "source": "虚构数值，仅供演示",
+        "per_100g": {
+          "energy_kcal": 45,
+          "protein_g": 3,
+          "fat_g": 1.5,
+          "carbohydrate_g": 5,
+          "fibre_g": 0
+        }
+      }
+    }
+  },
+  "days": [
+    {
+      "day": 1,
+      "group_id": "01",
+      "meals": [
+        {
+          "meal": "早餐",
+          "title": "演示第1组 · 早餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 50
+            },
+            {
+              "food_id": "demo_drink",
+              "g": 55
+            }
+          ]
+        },
+        {
+          "meal": "上午加餐",
+          "title": "演示第1组 · 上午加餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_fruit",
+              "g": 50
+            }
+          ]
+        },
+        {
+          "meal": "午餐",
+          "title": "演示第1组 · 午餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 50
+            },
+            {
+              "food_id": "demo_protein",
+              "g": 55
+            },
+            {
+              "food_id": "demo_veg",
+              "g": 60
+            }
+          ]
+        },
+        {
+          "meal": "下午加餐",
+          "title": "演示第1组 · 下午加餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_drink",
+              "g": 50
+            }
+          ]
+        },
+        {
+          "meal": "晚餐",
+          "title": "演示第1组 · 晚餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 50
+            },
+            {
+              "food_id": "demo_veg",
+              "g": 55
+            },
+            {
+              "food_id": "demo_protein",
+              "g": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "group_id": "02",
+      "meals": [
+        {
+          "meal": "早餐",
+          "title": "演示第2组 · 早餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 60
+            },
+            {
+              "food_id": "demo_drink",
+              "g": 65
+            }
+          ]
+        },
+        {
+          "meal": "上午加餐",
+          "title": "演示第2组 · 上午加餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_fruit",
+              "g": 60
+            }
+          ]
+        },
+        {
+          "meal": "午餐",
+          "title": "演示第2组 · 午餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 60
+            },
+            {
+              "food_id": "demo_protein",
+              "g": 65
+            },
+            {
+              "food_id": "demo_veg",
+              "g": 70
+            }
+          ]
+        },
+        {
+          "meal": "下午加餐",
+          "title": "演示第2组 · 下午加餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_drink",
+              "g": 60
+            }
+          ]
+        },
+        {
+          "meal": "晚餐",
+          "title": "演示第2组 · 晚餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 60
+            },
+            {
+              "food_id": "demo_veg",
+              "g": 65
+            },
+            {
+              "food_id": "demo_protein",
+              "g": 70
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "group_id": "03",
+      "meals": [
+        {
+          "meal": "早餐",
+          "title": "演示第3组 · 早餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 70
+            },
+            {
+              "food_id": "demo_drink",
+              "g": 75
+            }
+          ]
+        },
+        {
+          "meal": "上午加餐",
+          "title": "演示第3组 · 上午加餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_fruit",
+              "g": 70
+            }
+          ]
+        },
+        {
+          "meal": "午餐",
+          "title": "演示第3组 · 午餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 70
+            },
+            {
+              "food_id": "demo_protein",
+              "g": 75
+            },
+            {
+              "food_id": "demo_veg",
+              "g": 80
+            }
+          ]
+        },
+        {
+          "meal": "下午加餐",
+          "title": "演示第3组 · 下午加餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_drink",
+              "g": 70
+            }
+          ]
+        },
+        {
+          "meal": "晚餐",
+          "title": "演示第3组 · 晚餐",
+          "steps": [
+            "仅软件演示，不是烹饪建议。"
+          ],
+          "ingredients": [
+            {
+              "food_id": "demo_grain",
+              "g": 70
+            },
+            {
+              "food_id": "demo_veg",
+              "g": 75
+            },
+            {
+              "food_id": "demo_protein",
+              "g": 80
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

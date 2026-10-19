@@ -1,0 +1,5 @@
+CREATE TABLE menu_library(version TEXT PRIMARY KEY, digest TEXT NOT NULL, content TEXT NOT NULL, synthetic INTEGER NOT NULL);
+CREATE TABLE menu_active(id INTEGER PRIMARY KEY CHECK(id=1), version TEXT NOT NULL REFERENCES menu_library(version));
+CREATE TABLE menu_day(target TEXT PRIMARY KEY, revision INTEGER NOT NULL DEFAULT 0, content TEXT NOT NULL);
+CREATE TABLE menu_preference(group_id TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, avoided INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE menu_event(id INTEGER PRIMARY KEY, target TEXT NOT NULL, content TEXT NOT NULL);

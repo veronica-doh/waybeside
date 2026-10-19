@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "fictional": true,
+  "title": "演示规则（虚构）",
+  "tag_vocabulary": [
+    { "id": "soft_texture", "label": "软烂质地" }
+  ],
+  "food_tags": {
+    "demo_noodle": ["soft"],
+    "demo_nut": ["hard", "nut"],
+    "demo_cracker": ["hard"]
+  },
+  "rules": [
+    {
+      "id": "demo_r1",
+      "when_requirement": "soft_texture",
+      "match": { "food_tags_any": ["hard"] },
+      "scope": "group",
+      "action": "exclude",
+      "message": "演示：含标记为“硬”的食材（虚构规则，非医学建议）"
+    },
+    {
+      "id": "demo_r2",
+      "when_requirement": "avoid_raw",
+      "match": { "food_tags_all": ["raw", "cold"] },
+      "scope": "meal",
+      "action": "warn",
+      "message": "演示：含标记为“生”且“凉”的食材（虚构规则，非医学建议）"
+    }
+  ]
+}

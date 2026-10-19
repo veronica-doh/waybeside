@@ -1,0 +1,12 @@
+CREATE TABLE source(id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, verification TEXT NOT NULL);
+CREATE TABLE profile(id TEXT PRIMARY KEY, source_id TEXT REFERENCES source(id), content TEXT NOT NULL);
+CREATE TABLE habit(id TEXT PRIMARY KEY, source_id TEXT REFERENCES source(id), domain TEXT NOT NULL, content TEXT NOT NULL);
+CREATE TABLE baseline(id TEXT PRIMARY KEY, source_id TEXT REFERENCES source(id), domain TEXT NOT NULL, layer TEXT NOT NULL CHECK(layer IN ('draft','revision','working')), parent_id TEXT REFERENCES baseline(id), version INTEGER NOT NULL, label TEXT NOT NULL, verification TEXT NOT NULL, content TEXT NOT NULL);
+CREATE TABLE treatment_course(id INTEGER PRIMARY KEY CHECK(id=1), treatment_type TEXT NOT NULL CHECK(treatment_type IN ('radiotherapy','chemotherapy','other')), label TEXT, count_unit TEXT NOT NULL DEFAULT 'session' CHECK(count_unit IN ('session','cycle')), total_count INTEGER CHECK(total_count IS NULL OR total_count BETWEEN 1 AND 200), schedule_kind TEXT NOT NULL CHECK(schedule_kind IN ('weekdays','manual')), weekdays TEXT NOT NULL DEFAULT '[]', start_date TEXT, version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE course_revision(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL);
+INSERT INTO course_revision VALUES(1,0);
+CREATE TABLE treatment_session(id INTEGER PRIMARY KEY, course_id INTEGER REFERENCES treatment_course(id), ordinal INTEGER UNIQUE NOT NULL, planned_date TEXT NOT NULL UNIQUE, actual_date TEXT, status TEXT NOT NULL CHECK(status IN ('planned','completed','postponed','cancelled')), confirmation_source TEXT, version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE calendar(id INTEGER PRIMARY KEY, session_id INTEGER UNIQUE REFERENCES treatment_session(id), date TEXT NOT NULL, kind TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE observation(id TEXT PRIMARY KEY, session_id INTEGER REFERENCES treatment_session(id), occurred_at TEXT NOT NULL, kind TEXT NOT NULL, content TEXT NOT NULL, version INTEGER NOT NULL);
+CREATE TABLE audit(id INTEGER PRIMARY KEY, actor TEXT NOT NULL, occurred_at TEXT NOT NULL, entity TEXT NOT NULL, entity_id TEXT NOT NULL, old_value TEXT, new_value TEXT NOT NULL);
+CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);

@@ -1,0 +1,6 @@
+WayBeside (伴程)
+Copyright 2026 WayBeside contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Runtime dependencies (Flask, Werkzeug, Jinja2, MarkupSafe, itsdangerous, click,
+blinker, waitress) are separate projects under their own licenses.
