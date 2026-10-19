@@ -195,7 +195,7 @@ def register(app):
             lib=active(db)
             return jsonify(version=data['version'],digest=digest(data),digest_kind='canonical-json-sha256',groups=len(data['days']),meals=5,
                 expected=lib['digest'] if lib else None,identity='演示（虚构）菜单' if data.get('fictional') is True else '本人菜单库',
-                message='确认后启用完整菜单库；旧预览失效，已采用历史保持冻结。')
+                message='确认后，这份菜单会成为你的菜单库；已经采用过的菜单不会变。')
 
     @app.post('/api/menu/import-confirm')
     def import_confirm():

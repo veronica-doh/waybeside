@@ -6,7 +6,7 @@
 
 - 默认数据目录：Windows `%LOCALAPPDATA%\WayBeside`；macOS `~/Library/Application Support/WayBeside`；Linux `~/.local/share/WayBeside`。可用环境变量 `WAYBESIDE_DATA_DIR` 改到别处。
 - 演示模式（`python run.py --demo`）使用独立的 `WayBeside-Demo` 目录，只含虚构数据，不碰你的真实数据；它固定为“我自己记，助手只帮挑菜单”。
-- 服务只监听本机回环地址 `127.0.0.1`。网页用一次性登录码进入：服务启动时生成，5 分钟内有效、用一次就作废，服务运行期间数据目录里不留任何常驻的令牌文件。
+- 服务只监听本机回环地址 `127.0.0.1`。网页用一次性登录码进入：服务启动时，以及助手每次运行 `open-url` 时生成，5 分钟内有效、用一次就作废，服务运行期间数据目录里不留任何常驻的令牌文件。
 
 ## 不做的事
 

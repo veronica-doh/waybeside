@@ -91,7 +91,7 @@ async function openToModePage({p,url,shot,stage,wait,noOverflow,api,tag}){
       const section=squash(await p.locator('#assistant-section').innerText());
       add(tag+'-settings-section','设置页「AI 助手」一节：当前方式的名字与同样的三问，有「换一种」',section.includes(squash(TEXT.menu_only[0]))&&TEXT.menu_only.slice(1).every(s=>section.includes(squash(s)))&&await p.locator('#assistant-change').isVisible(),section.slice(0,120));
       add(tag+'-no-recent-in-menu-only','「助手最近做了什么」只在全部打理下出现',await p.locator('#assistant-recent').count()===0,'');
-      add(tag+'-menu-only-promises','我自己记：过敏与备注旁保留原来的承诺文字',/也不会给外部助手/.test(await p.locator('#settings-diet').innerText()),'');
+      add(tag+'-menu-only-promises','我自己记：过敏与备注旁保留原来的承诺文字',/也不会给 AI 助手/.test(await p.locator('#settings-diet').innerText()),'');
       add(tag+'-settings-no-overflow','设置页没有横向溢出',await noOverflow(),'');
       // 换一种：必须经过同一个选择页，且不预选，可取消
       await p.click('#assistant-change');await wait(()=>document.querySelector('#gate').dataset.stage==='mode');
@@ -105,7 +105,7 @@ async function openToModePage({p,url,shot,stage,wait,noOverflow,api,tag}){
       add(tag+'-changed-to-full','换成「全部打理」：设置页改写为第一种的三问，出现「助手最近做了什么」（空）',(await api('state')).assistant_mode==='full'&&after.includes(squash(TEXT.full[0]))&&TEXT.full.slice(1).every(s=>after.includes(squash(s)))&&await p.locator('#assistant-recent').count()===1,after.slice(0,160));
       add(tag+'-cli-full','助手命令行：api 现在可用，状态为 full',cli('api','GET','/api/state').out.status===200&&cli('status').out.assistant_mode==='full','');
       const diet=await p.locator('#settings-diet').innerText();
-      add(tag+'-full-promises','全部打理：过敏与备注旁换成真实说法，不再说「不会给外部助手」',diet.includes('你选了让助手全部打理，助手能看到这一项')&&!/不会给外部助手/.test(diet),'');
+      add(tag+'-full-promises','全部打理：过敏与备注旁换成真实说法，不再说「不会给 AI 助手」',diet.includes('你选了让助手全部打理，助手能看到这一项')&&!/不会给外部助手/.test(diet),'');
       await nav('export');
       const ex=await p.locator('#export-page').innerText();
       add(tag+'-export-note','导出给助手：全部打理下写明开关现在不起作用，不再有「永远是你自己点」',ex.includes('你选了让助手全部打理，这些开关现在不起作用')&&!/永远是你自己点|都不会给助手/.test(ex),ex.slice(0,200));

@@ -17,7 +17,7 @@ import webbrowser
 from . import login, service
 from .access import AGENT_ENDPOINTS
 from .menu_door import CandidateError
-from .storage import (MODE_SAYS, MODES, check_demo_directory, connect, data_directory, encode, is_demo,
+from .storage import (audit, MODE_SAYS, MODES, check_demo_directory, connect, data_directory, encode, is_demo,
                       schema_version, backup as backup_database)
 
 SAYS = dict(MODE_SAYS, **{
@@ -27,7 +27,9 @@ SAYS = dict(MODE_SAYS, **{
     'STORAGE_BUSY': '记录正在被网页或另一个操作使用，请稍后再试。',
     'TODAY_MISMATCH': '助手和网页服务对“今天”的设置不一致，请用同一个 WAYBESIDE_TODAY 设置后重试。',
     'SERVICE_NOT_RUNNING': 'WayBeside 服务没有在运行，请先启动服务。',
-    'ROUTE_NOT_ALLOWED': '这个接口不对助手开放，需要你在网页上做。',
+    'ROUTE_NOT_ALLOWED': '这个接口不对助手开放，或者接口名写错了。请对照 AGENTS.md 里的接口列表；需要人做的事，请转告他在网页上做。',
+    'SHARE_DISABLED': '你还没有开启“菜单库”共享。请到网页「设置 → 导出给助手」里打开它，我才能挑菜单。',
+    'INVALID_JSON': '正文文件不是合法的 JSON，请检查后重试。',
     'DEMO_DIR_NOT_SAFE': '演示数据不能放在真实数据目录里，未执行。',
     'OUTPUT_EXISTS': '输出文件已存在，请换一个新文件名。',
     'FILE_OR_DATE_ERROR': '文件或日期不正确。',
@@ -152,6 +154,13 @@ def read_body(source):
     return json.loads(text)
 
 
+def record_export(path, kind):
+    """dump / backup 成功后留一条助手动作的 audit（只记动作名，不记内容），让网页“助手最近做了什么”看得到。"""
+    with connect(path) as db:
+        db.execute('BEGIN IMMEDIATE')
+        audit(db, 'assistant_export_' + kind, kind, None, None, actor='agent', fields=[kind], version=1)
+
+
 def write_new(output, content):
     descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
@@ -175,13 +184,17 @@ def run(args, directory, path):
             except Failure as failure:
                 failure.extra['service'] = running
                 raise
-            return {'status': 'OK', 'assistant_mode': mode_of(meta), 'schema_version': int(meta['schema_version']),
-                    'database': str(path), 'service': running}
+            result = {'status': 'OK', 'assistant_mode': mode_of(meta), 'schema_version': int(meta['schema_version']),
+                      'database': str(path), 'service': running}
+            if result['assistant_mode'] == 'unset':
+                result['say'] = MODE_SAYS['MODE_NOT_CHOSEN']       # 助手要转告人的话，不必先撞一次错误才拿到
+            return result
         if info is None:
             raise Failure('SERVICE_NOT_RUNNING', start_command=START_COMMAND)
         # 新码只交给浏览器；本命令不打印、不自己使用。
         url = f"http://127.0.0.1:{info['port']}/#login={login.issue(directory)}"
-        return {'status': 'OK', 'opened': bool(webbrowser.open(url)), 'port': info['port']}
+        return {'status': 'OK', 'opened': bool(webbrowser.open(url)), 'port': info['port'],
+                'say': '我已经把网页打开了。请你先看免责声明，再选一种使用方式，选好了告诉我。'}
     meta = inspect(path)
     gate(command, meta)
     extra = check_today(directory)
@@ -195,13 +208,17 @@ def run(args, directory, path):
             backup_database(path, args.output)
         except FileExistsError as error:
             raise Failure('OUTPUT_EXISTS') from error
+        record_export(path, 'backup')
         return {'status': 'OK', 'output': str(Path(args.output).resolve()), 'sha256': sha256_file(args.output)}
     app, client, origin, headers = make_client(path)
     if command == 'api':
         method = args.method.upper()
         if not route_allowed(app, method, args.path):
             raise Failure('ROUTE_NOT_ALLOWED', status=403)
-        body = read_body(args.json) if args.json else None
+        try:
+            body = read_body(args.json) if args.json else None
+        except json.JSONDecodeError as error:
+            raise Failure('INVALID_JSON') from error
         code, payload = call(client, origin, headers, method, args.path, body)
         return dict({'status': code, 'body': payload}, **extra)
     # dump：健康记录全量 = summary ∪ settings（嵌套放置，避免同名字段冲突）。完整迁移请用 backup。
@@ -215,6 +232,7 @@ def run(args, directory, path):
         write_new(args.output, content)
     except FileExistsError as error:
         raise Failure('OUTPUT_EXISTS') from error
+    record_export(path, 'dump')
     return {'status': 'OK', 'output': str(Path(args.output).resolve()), 'sha256': sha256_file(args.output)}
 
 

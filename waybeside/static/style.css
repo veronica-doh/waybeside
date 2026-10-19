@@ -120,3 +120,8 @@ body.gating .demo-banner{display:none}
 @media(max-width:650px){.mode-option{padding:14px;gap:12px}.mode-name{font-size:20px}.mode-line{font-size:16px}.gate-box h1{font-size:28px}}
 .nowrap{white-space:nowrap}
 .mode-box button:disabled{border:2px solid var(--line)}
+
+/* 求助页之外的补充：未登录时收起导航；窄屏表格提示。 */
+body.signed-out .nav,body.signed-out .head-links,body.signed-out footer .text-button{display:none}
+.table-hint{display:none}.table-scroll{overflow-x:auto}.table-scroll table{min-width:560px}
+@media(max-width:650px){.table-hint{display:block}}

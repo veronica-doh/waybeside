@@ -19,7 +19,7 @@ function hydrateText(root){
 }
 async function api(path,data){
   const response=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:data===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data===undefined?undefined:JSON.stringify(data)});
-  if(!response.ok){const detail=await response.json().catch(()=>({}));const failure=new Error(response.status===409?(detail.code==='CONFIRM_REQUIRED'?detail.error:'记录已变化或已锁定，请刷新、重新预览或显式解锁后再保存。'):response.status===401?'服务已重启，请从启动时打开的窗口进入。':detail.error||'未保存，请检查输入、预约日期或本机服务。');failure.status=response.status;failure.code=detail.code;throw failure;}
+  if(!response.ok){const detail=await response.json().catch(()=>({}));const failure=new Error(response.status===409?(detail.code==='CONFIRM_REQUIRED'?detail.error:'记录已变化或已锁定，请刷新、重新预览或显式解锁后再保存。'):response.status===401?t('session.lost'):detail.error||'未保存，请检查输入、预约日期或本机服务。');failure.status=response.status;failure.code=detail.code;throw failure;}
   return response;
 }
 function readableAudit(event){
@@ -88,9 +88,7 @@ async function persistAux(){
   catch(error){await refreshState();render();throw error;}
 }
 function decorateLocal(current){
-  if(current==='help')for(const card of main.querySelectorAll('.grid .card')){
-    const source=document.createElement('p');source.className='small';source.textContent='提示来源：本项目内置的通用说明；核对状态：未核对（未经专业人员审阅），不含医学阈值。';card.append(source);
-  }
+  if(current==='help'){const note=document.createElement('p');note.className='small';note.textContent=t('help.source');main.append(note);}
   if(current==='course'||current==='history'){
     const actions=document.createElement('div');actions.className='actions';
     const link=document.createElement('a');link.href='/api/summary';link.className='button secondary';link.textContent='导出记录（JSON，含健康记录）';actions.append(link);const warn=document.createElement('p');warn.className='small';warn.textContent='这个文件含你的健康记录，请勿随意转发。';actions.append(warn);
@@ -105,5 +103,5 @@ document.querySelector('#reset').onclick=()=>confirmAction('退出本机服务�
     if(match){const token=decodeURIComponent(match[1]);window.history.replaceState(null,'',location.pathname);csrf=(await (await api('login',{token})).json()).csrf;}
     else csrf=(await (await api('session')).json()).csrf;
     await refreshState();record=recordForDate(TODAY);render();
-  }catch(error){main.textContent=error.message+' 请重新运行启动命令打开窗口。';}
+  }catch(error){document.body.classList.add('signed-out');main.textContent=error.status===401?error.message:error.message+' '+t('session.other');}
 })();

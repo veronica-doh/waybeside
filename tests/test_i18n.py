@@ -66,7 +66,7 @@ def test_every_activity_kind_has_a_label():
     from waybeside.activity import kind_of
     entities = ('observation', 'questionnaire', 'treatment_course', 'treatment_session', 'menu_library', 'menu_preference',
                 'menu_select', 'menu_adopt', 'menu_undo', 'menu_cancel_draft', 'menu_lock', 'menu_actual',
-                'menu_rule_override', 'menu_candidate', 'rules')
+                'menu_rule_override', 'menu_candidate', 'rules', 'assistant_export_dump', 'assistant_export_backup')
     kinds = {kind_of(e, 'aux' if e == 'observation' else 'x', None) for e in entities} | {kind_of('observation', 'abc', None)}
     for kind in kinds:
         assert f'activity.{kind}' in PACK, kind

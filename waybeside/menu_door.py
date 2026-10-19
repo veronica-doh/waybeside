@@ -334,8 +334,10 @@ def register(app):
         with connect(path) as db:
             db.execute('BEGIN IMMEDIATE')
             lib = active(db)
-            row = db.execute("SELECT * FROM menu_candidate WHERE target_date=? AND status IN ('READY_TO_REVIEW','WAITING_EXTERNAL') ORDER BY rowid DESC LIMIT 1", (target,)).fetchone()
-            return jsonify(candidate=view(db, lib, row) if row and lib else None)
+            row = db.execute("SELECT rowid AS rid,* FROM menu_candidate WHERE target_date=? AND status IN ('READY_TO_REVIEW','WAITING_EXTERNAL') ORDER BY rowid DESC LIMIT 1", (target,)).fetchone()
+            # 助手再取了一次资料，之前提交的建议就被替换了：给网页一个“有过被替换的建议”的标记（不含内容）。
+            replaced = bool(row) and db.execute("SELECT 1 FROM menu_candidate WHERE target_date=? AND (status='SUPERSEDED' OR (status='READY_TO_REVIEW' AND rowid<?)) LIMIT 1", (target, row['rid'])).fetchone() is not None
+            return jsonify(candidate=view(db, lib, row) if row and lib else None, replaced=replaced)
 
     @app.post('/api/menu/candidate/<identifier>/adopt')
     def candidate_adopt(identifier):

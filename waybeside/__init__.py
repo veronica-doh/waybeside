@@ -10,7 +10,7 @@ from uuid import uuid4
 from flask import Flask, abort, g, jsonify, make_response, request, send_file
 from . import login as login_code
 from .access import AGENT_ENDPOINTS
-from .storage import (initialize, connect, audit, encode, backup, assistant_mode, current_actor,
+from .storage import (FieldError, field, initialize, connect, audit, encode, backup, assistant_mode, current_actor,
                       mode_error, MODE_SAYS)
 
 LAB_KEYS = ('date', 'metric', 'unit', 'lab', 'value', 'low', 'high')
@@ -28,8 +28,11 @@ def day(value):
     return date.fromisoformat(value)
 
 def exact(data, keys):
-    if not isinstance(data, dict) or set(data) - set(keys):
+    if not isinstance(data, dict):
         raise ValueError('拒绝未知字段')
+    unknown = sorted(str(k) for k in set(data) - set(keys))
+    if unknown:
+        raise FieldError(', '.join(unknown[:5]))     # 只报多出来的字段名，不报值
 
 def text(value, limit):
     if not isinstance(value, str) or len(value) > limit:
@@ -93,6 +96,10 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
             'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"})
         return response
 
+    @app.errorhandler(FieldError)
+    def invalid_field(error):
+        return jsonify(code='INVALID_FIELD', field=error.field, error='资料不符合记录约束，请检查日期、字段、版本和关联。'), 400
+
     @app.errorhandler(ValueError)
     @app.errorhandler(TypeError)
     @app.errorhandler(KeyError)
@@ -155,8 +162,9 @@ def create_app(db_path, port=8765, token=None, today=None, actor='local-user', m
             if not 1 <= len(name.strip()) <= 20 or name != name.strip() or not isinstance(state, str) or state not in ('unknown', 'none', 'some'):
                 raise ValueError('症状条目')
         content['symptoms'] = symptoms
-        if any(content[k] not in values for k, values in FIELDS.items()):
-            raise ValueError('未知状态值')
+        for k, values in FIELDS.items():
+            if content[k] not in values:
+                raise FieldError(k)
         minutes = data.get('minutes', '')
         if minutes != '' and (not isinstance(minutes, str) or not minutes.isdigit() or not 0 <= int(minutes) <= 1440):
             raise ValueError('分钟数格式')

@@ -60,13 +60,31 @@ python3.11 -m venv .venv
 
 - 用法：`api <GET|POST> <路径> [--json 文件]`。路径里可以带查询参数，例如 `/api/menu?date=2026-10-21`；POST 的正文放进 JSON 文件。`summary` 的附件会解析成 JSON 放进 `body`。
 - 输出 `{"status": HTTP码, "body": ..., ...}`；非 2xx 退出码为 2。存储正忙时返回 `STORAGE_BUSY`，等一会儿重试。
-- 可用的接口：`state`、`observations`、`aux`、`summary`、`course`、`course/generate`、`sessions`、`sessions/<id>`、`onboarding/<块>`、`settings`、`menu`、`menu/action`、`menu/shopping`、`menu/import-preview`、`menu/import-confirm`、`menu/candidate`（及其 adopt / decline）。其余（登录、免责、选方式、共享开关、网页备份、退出）一律返回 `ROUTE_NOT_ALLOWED`。
+- 可用的接口：`state`、`observations`、`aux`、`summary`、`course`、`course/generate`、`sessions`、`sessions/<id>`、`onboarding/<块>`、`settings`、`menu`、`menu/action`、`menu/shopping`、`menu/import-preview`、`menu/import-confirm`、`menu/candidate`（及其 adopt / decline）。其中 `aux` 只能写（POST），检验的读取在 `api GET /api/state` 里（`observation` 中 `id` 为 `aux` 的那一项）。其余（登录、免责、选方式、共享开关、网页备份、退出）一律返回 `ROUTE_NOT_ALLOWED`。
+- 例子里的临时文件（正文 JSON、下面两个小脚本、`dump.json`、`backup.sqlite`）请放在一个**不在应用目录、也不在任何 Git 仓库里**的工作目录，用 `--json`、`--output` 指向它们；命令本身在应用目录里执行。健康资料不要落进代码仓库。
 - **先读后写。** 每个写接口都带版本号（`version`、`settings_version` 或 `expected_revision`），数字取自刚读到的 `state` 或 `settings`；返回 409 说明人或别处刚改过，重新读，不要硬覆盖。
 - 下面例子里的数字，对应一个刚做完上面前几步的全新库；真实库里一律以你刚读到的为准。例子里的日期假定“今天”是 2026-10-20。
 
 ### 问卷四块
 
-先 `api GET /api/settings`，看 `versions` 里每块的版本（新库都是 0）。四块是 `basic`（昵称、年龄段、谁在用）、`treatment`（疗程）、`diet`（饮食要求、过敏提醒、备注）、`habit`（日常习惯）。人说“不知道”的项就不写或写 `{"unknown": true}`，**不要替人猜**。
+先 `api GET /api/settings`，看 `versions` 里每块的版本（新库都是 0）。四块是 `basic`（昵称、年龄段、谁在用）、`treatment`（疗程）、`diet`（饮食要求、过敏提醒、备注）、`habit`（日常习惯）。人说“不知道”的项就不写或写 `{"unknown": true}`，**不要替人猜**；只有 `basic` 里的 `helper_mode` 是必填。
+
+可用的取值（别的值会得到 400，`body.field` 会指出是哪个字段）：
+
+| 字段 | 取值 |
+|---|---|
+| `helper_mode`（必填，谁在用） | `self`（本人自己用）、`with_helper`（有他人帮忙一起记，例如家属代为记录） |
+| `age_band` | `under_18`、`18_39`、`40_64`、`65_plus` |
+| `sleep_usual` | `regular`、`irregular`、`unknown` |
+| `activity_usual` | `none`、`light`、`regular` |
+| `meditation_usual` | `{"time": "07:30", "minutes": 15}`（`time` 的格式是 `HH:MM`，`minutes` 是 0 到 180 的整数，两项都要给，可以是 `null`） |
+| 每日记录里的 `diet`、`exercise`、`meditation` | `unknown`、`done`、`partial`、`not_done` |
+| 每日记录里的 `sleep` | `unknown`、`good`、`poor` |
+| 每日记录里的 `mood` | `unknown`、`平静`、`有点担心`、`心情不错`、`说不清` |
+| 每日记录里的 `energy` | `unknown`、`还可以`、`有点累`、`想多休息` |
+| 每日记录里 `symptoms` 的值 | `unknown`、`none`、`some` |
+
+他人帮忙记录时，请写 `with_helper`，不要为了通过校验写成 `self`。
 
 ```json basic.json
 {"answers": {"nickname": "示例用户", "helper_mode": "self", "age_band": "40_64"}, "version": 0}
@@ -178,7 +196,7 @@ print(json.dumps({"menu": menu, "digest": preview["digest"], "expected": preview
 
 ### 读出全部、备份
 
-`dump` 把健康记录全量写成一个新文件（`summary` 加 `settings`，含检验、问卷和备注）；**完整迁移用 `backup`**，它写一份一致性的数据库备份。两个都只能写到不存在的新文件，同名已存在会返回 `OUTPUT_EXISTS`，输出里有路径和 `sha256`。
+`dump` 把健康记录全量写成一个新文件（`dump` 和 `backup` 也会出现在网页的“助手最近做了什么”里，只写动作名和日期）（`summary` 加 `settings`，含检验、问卷和备注）；**完整迁移用 `backup`**，它写一份一致性的数据库备份。两个都只能写到不存在的新文件，同名已存在会返回 `OUTPUT_EXISTS`，输出里有路径和 `sha256`。
 
 ```sh full
 .venv/bin/python -m waybeside.agent_door dump --output dump.json
@@ -198,7 +216,7 @@ print(json.dumps({"menu": menu, "digest": preview["digest"], "expected": preview
 .venv/bin/python -m waybeside.agent_door submit candidate.json
 ```
 
-默认目标日为本机明天；不指定 `--output` 时输出到数据目录的 `agent_inbox/任务ID.json`，命令返回的 `package` 是文件路径；指定的 `--output` 必须是新文件。重复 export 复用同日未失效的等待任务。**程序升级后，之前的等待任务都会失效，先重新 export。**
+默认目标日为本机明天；不指定 `--output` 时输出到数据目录的 `agent_inbox/任务ID.json`，命令返回的 `package` 是文件路径；指定的 `--output` 必须是新文件。重复 export 复用同日未失效的等待任务。**注意：你提交了建议（`READY_TO_REVIEW`）、人还没看的时候，再对同一天 export 一次，会开出新的等待任务，之前那份待审建议就作废了，要重新提交；网页上会写明“之前的建议已作废”。** 想让人看到你已经提交的建议，就不要再 export 同一天。**程序升级后，之前的等待任务都会失效，先重新 export。**
 
 ### 共享开关：默认全关，只能本人开启
 
@@ -261,7 +279,8 @@ Path(sys.argv[2]).write_text(json.dumps(candidate, ensure_ascii=False), encoding
 | `SCHEMA_MISMATCH` | 库的版本和程序不一致 | 重启服务完成升级，再重试 |
 | `SERVICE_NOT_RUNNING` | 服务没在运行 | 先启动服务 |
 | `TODAY_MISMATCH` | 命令与服务对“今天”的设置不同 | 去掉多余的 `WAYBESIDE_TODAY`，或让两边一致 |
-| `ROUTE_NOT_ALLOWED` | 这个接口不对助手开放 | 转告人在网页上做 |
+| `ROUTE_NOT_ALLOWED` | 这个接口不对助手开放，或者接口名写错了 | 对照上面的接口列表；确实是人才能做的事，转告人在网页上做 |
+| `INVALID_JSON` | `--json` 文件不是合法 JSON | 修正文件 |
 | `DEMO_DIR_NOT_SAFE` | 演示数据不能放在真实数据目录里 | 换演示目录 |
 | `OUTPUT_EXISTS` | 输出文件已存在 | 换一个新文件名 |
 | `STORAGE_BUSY` | 记录正被网页或另一个操作使用 | 等一会儿重试，不要改库绕过 |
@@ -284,7 +303,7 @@ Path(sys.argv[2]).write_text(json.dumps(candidate, ensure_ascii=False), encoding
 | `JOB_NOT_WAITING` | 任务已提交、取消或失效，不自动重送 | 重新 export |
 | `UNKNOWN_JOB` / `EXPORT_REQUIRED` | 先 export | 先 export |
 
-`api` 的返回里 `body` 还可能带这些业务码（HTTP 409 / 400）：`CONFIRM_REQUIRED`（这天不在治疗日，需要意图标记 `confirm_off_schedule`）、`RULE_CONFIRM_REQUIRED`（这一组被规则隐藏，需要意图标记 `rule_confirmed`）、`CANNOT_GENERATE`（先填好按星期排期、总次数和开始日）、`NOTHING_TO_GENERATE`（已有的次数已达到总数）、`DISCLAIMER_REQUIRED`。单纯的 409 说明版本过期，重新读再写。
+`api` 的返回里 `body` 还可能带这些业务码（HTTP 409 / 400）：`INVALID_FIELD`（400，`body.field` 是不合格的字段名，不会回显你写的值；缺必填项时也指向它）、`CONFIRM_REQUIRED`（这天不在治疗日，需要意图标记 `confirm_off_schedule`）、`RULE_CONFIRM_REQUIRED`（这一组被规则隐藏，需要意图标记 `rule_confirmed`）、`CANNOT_GENERATE`（先填好按星期排期、总次数和开始日）、`NOTHING_TO_GENERATE`（已有的次数已达到总数）、`DISCLAIMER_REQUIRED`。单纯的 409 说明版本过期，重新读再写。
 
 ## 护栏
 

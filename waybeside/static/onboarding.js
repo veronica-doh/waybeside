@@ -136,17 +136,19 @@ function buildDiet(d = {}, builtin = {}) {
   drawTags();
   const newTag = textInput('q-newtag', '', 20);
   const addTag = element('button', '加一个标签', 'secondary'); addTag.type = 'button'; addTag.id = 'q-addtag';
-  addTag.onclick = () => {
+  const addPendingTag = () => {
     const label = newTag.value.trim(); if (!label) return;
     if (custom.some(t => t.label === label)) { newTag.value = ''; return; }
     let n = custom.length + 1; while (custom.some(t => t.id === 'my_tag_' + n)) n++;
     const id = 'my_tag_' + n; custom.push({id, label}); chosen.add(id); newTag.value = ''; drawTags();
   };
+  addTag.onclick = addPendingTag;
   const allergyUnknown = checkLine('q-allergy-unknown', '我不知道 / 先不填', d.allergy_reminders?.unknown);
   const aList = editableList(allergies, 30);
   const newAllergy = textInput('q-newallergy', '', 20);
   const addAllergy = element('button', '加一条', 'secondary'); addAllergy.type = 'button'; addAllergy.id = 'q-addallergy';
-  addAllergy.onclick = () => { const v = newAllergy.value.trim(); if (v && !allergies.includes(v)) allergies.push(v); newAllergy.value = ''; aList.redraw(); };
+  const addPendingAllergy = () => { const v = newAllergy.value.trim(); if (v && !allergies.includes(v)) allergies.push(v); newAllergy.value = ''; aList.redraw(); };
+  addAllergy.onclick = addPendingAllergy;
   const note = element('textarea'); note.id = 'q-freenote'; note.maxLength = 500; note.value = d.free_note || '';
   const s1 = element('fieldset', undefined, 'field'); s1.append(element('legend', '你想要的饮食要求（自己勾；这些只是筛选用的标签，伴程不会替你解释它们的医学含义）'), tagBox, tagsUnknown,
     field('自己加一个标签', newTag), addTag);
@@ -154,6 +156,8 @@ function buildDiet(d = {}, builtin = {}) {
     field('写一条', newAllergy), addAllergy);
   node.append(s1, s2, field(tm('wizard.note_label'), note));
   return {node, read() {
+    // 写在框里、但没点“加一条 / 加一个标签”的内容，保存时一并算上，不静默丢掉。
+    addPendingTag(); addPendingAllergy();
     const a = {custom_tags: custom.map(t => ({...t}))};
     a.requirement_tags = tagsUnknown.querySelector('input').checked ? UNKNOWN() : [...chosen];
     a.allergy_reminders = allergyUnknown.querySelector('input').checked ? UNKNOWN() : [...allergies];

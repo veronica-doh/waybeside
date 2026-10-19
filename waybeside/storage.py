@@ -79,6 +79,21 @@ def current_actor():
     """请求内取 g.actor（HTTP 面恒为 local-user，只有命令行注入的 app 才是 agent）；请求外是程序自己。"""
     return g.get('actor', 'local-user') if has_request_context() else 'local-program'
 
+class FieldError(ValueError):
+    """校验失败时指明是哪个字段（只给字段名，不回显值）。"""
+    def __init__(self, name):
+        super().__init__(name)
+        self.field = name
+
+@contextmanager
+def field(name):
+    try:
+        yield
+    except FieldError:
+        raise
+    except ValueError as error:
+        raise FieldError(name) from error
+
 class Guarded(sqlite3.Connection):
     """事务一开始就再读一次方式：助手的请求在 BEGIN 之后若方式已不是 full 就整体放弃。"""
     def execute(self, sql, *args):
@@ -108,7 +123,7 @@ def encode(value):
 
 # 问卷类实体的 audit 只记字段名，不记值：old_value/new_value 恒为 NULL，
 # 事实写在 detail：{fields, version, at, actor, ...无值的标记}。
-REDACTED_ENTITIES = ('questionnaire', 'agent_share', 'settings', 'assistant_mode')
+REDACTED_ENTITIES = ('questionnaire', 'agent_share', 'settings', 'assistant_mode', 'assistant_export_dump', 'assistant_export_backup')
 
 def audit(db, entity, entity_id, old, new, actor=None, fields=None, version=None, extra=None):
     actor = actor or current_actor()

@@ -7,7 +7,7 @@ const menuShoppingDates=new Set();
 const oldDecorate=decorateLocal;
 decorateLocal=function(current){if((current!=='tomorrow'||!menuData?.enabled)&&!['plan','baseline'].includes(current))oldDecorate(current);document.querySelectorAll('.nav a').forEach(link=>link.hidden=false);const badge=document.querySelector('.prototype span');if(badge)badge.textContent=demoMode?'演示数据（虚构） · 不调用模型':'本机私人记录 · 不调用模型';if(menuData?.enabled&&['today','tomorrow','plan','baseline'].includes(current))renderMenu(current==='baseline'?'plan':current);if(menuData&&!menuData.enabled&&['tomorrow','plan','baseline'].includes(current))renderNoMenuLibrary(current);};
 function renderNoMenuLibrary(current){const box=element('section',undefined,'menu-section');box.id='menu-empty';box.append(element('h1',current==='tomorrow'?'准备明天':'我的方案'),element('p','尚未导入菜单库。导入一份菜单文件后，这里才会出现每天的推荐；没有导入前不会生成任何菜单。','menu-state'),importPanel());main.replaceChildren(box);}
-let menuNotice='', menuCandidate=null, candidateSignature='', menuSettings=null;
+let menuReplaced=false, menuNotice='', menuCandidate=null, candidateSignature='', menuSettings=null;
 // ---- 规则筛选：规则文字、提醒文字一律走 textContent。过敏提醒只作提示，不参与任何筛选。----
 async function loadMenuSettings(){try{menuSettings=await(await api('settings')).json();}catch(error){menuSettings=null;}}
 function ruleLabel(id){return menuSettings?.builtin_tags?.[id]||menuSettings?.diet?.custom_tags?.find(t=>t.id===id)?.label||id;}
@@ -49,7 +49,7 @@ function menuFocus(id,block='nearest'){const target=document.getElementById(id);
 function announceMenu(message){const live=document.getElementById('agent-status');if(live)live.textContent=message;}
 const nutrientLabels={energy_kcal:'能量（千卡）',protein_g:'蛋白质（克）',fat_g:'脂肪（克）',carbohydrate_g:'碳水（克）',fibre_g:'纤维（克）'};
 function nutritionText(values){return Object.entries(nutrientLabels).map(([key,label])=>`${label}：${values[key]===null?'未知':values[key].toFixed(1)}`).join(' · ');}
-async function loadMenuCandidate(){try{const reply=await(await api('menu/candidate?target_date='+encodeURIComponent(menuData.state.target_date))).json();menuCandidate=reply?.candidate||null;}catch(error){menuCandidate=null;}candidateSignature=menuCandidate?menuCandidate.id+menuCandidate.status:'';}
+async function loadMenuCandidate(){try{const reply=await(await api('menu/candidate?target_date='+encodeURIComponent(menuData.state.target_date))).json();menuCandidate=reply?.candidate||null;menuReplaced=reply?.replaced===true;}catch(error){menuCandidate=null;}candidateSignature=menuCandidate?menuCandidate.id+menuCandidate.status+(menuReplaced?'r':''):'';}
 async function fetchMenu(target){const result=await(await api('menu'+(target?'?date='+encodeURIComponent(target):''))).json();menuData=result;if(result.enabled){await loadMenuSettings();TODAY=result.today;TOMORROW=result.tomorrow;menuDate=result.state.target_date;await loadMenuCandidate();await loadActivity();}return result;}
 function weightBasisLabel(value){return {cooked_edible:'熟制后可食部分重量',dry:'干重',raw_edible:'生的可食部分重量',ready_to_cook:'待烹调食材重量',ready_to_eat:'即食状态重量'}[value]||'重量口径待核对（保留原份量）';}
 async function nextMenuGroup(){
@@ -196,12 +196,13 @@ const reasonText={USER_PREFERENCE:'更贴合本人偏好',VARIETY:'换换花样'
 function candidatePanel(s,selected){
   const panel=element('section',undefined,'menu-candidate');panel.id='menu-candidate';panel.tabIndex=-1;
   panel.append(element('h2','电脑上的助手给的建议'));const c=menuCandidate;
+  if(c&&menuReplaced){const replaced=element('p',t('menu.candidate_replaced'),'menu-feedback');replaced.id='menu-candidate-replaced';replaced.setAttribute('role','status');panel.append(replaced);}
   if(!c||c.status==='WAITING_EXTERNAL'){panel.append(element('p',c?'已把资料交给电脑上的助手，等它提交建议。':tm('menu.candidate_empty'),'small'));return panel;}
   if(c.status!=='READY_TO_REVIEW'){panel.append(element('p','菜单或偏好有变化，之前的建议已经失效，请让助手重新取资料再提交。','small'));return panel;}
   panel.append(element('p','由电脑上的助手提交 · '+dayLabel(c.target_date)+' · '+(reasonText[c.reason_code]||'')+'。'+tm('menu.candidate_tail'),'small'));
   const base=s.adopted||selected,rows=element('div',undefined,'menu-diff');
   for(const meal of c.group.meals){const before=base?.meals.find(m=>m.meal===meal.meal);const same=before&&before.title===meal.title;
-    const row=element('div',undefined,'menu-diff-row'+(same?'':' changed'));row.append(element('strong',meal.meal),element('span','现在：'+(before?before.title:'未定')),element('span','建议：'+meal.title),element('span',same?'相同':'更换'));rows.append(row);}
+    const row=element('div',undefined,'menu-diff-row'+(same?'':' changed'));row.append(element('strong',meal.meal),element('span',(s.adopted?'现在：':'目前准备的：')+(before?before.title:'未定')),element('span','建议：'+meal.title),element('span',same?'相同':'更换'));rows.append(row);}
   panel.append(rows);
   const label=element('label',undefined,'menu-check'),box=element('input');box.type='checkbox';box.id='menu-cand-reviewed';label.append(box,element('span','我看过上面的对照，愿意采用这份建议。'));panel.append(label);
   const actions=element('div',undefined,'menu-actions');
@@ -227,7 +228,7 @@ function importPanel(){
   const panel=element('details');panel.id='menu-import';panel.append(element('summary','导入菜单库'));
   panel.append(element('p',tm('menu.import_copy'),'small'));
   const file=element('input');file.id='menu-import-file';file.type='file';file.accept='.json,application/json';file.setAttribute('aria-label','选择我的菜单文件');const output=element('div');output.setAttribute('aria-live','polite');
-  file.onchange=async()=>{output.replaceChildren();try{if(!file.files[0]||file.files[0].size>1500000)throw new Error('请选择小于1.5MB的menu.json');const menu=JSON.parse(await file.files[0].text());const preview=await(await api('menu/import-preview',menu)).json();output.append(element('p',`版本 ${preview.version} · ${preview.groups} 组 · 每组 ${preview.meals} 餐 · ${preview.identity}`),element('p',preview.message),button('确认导入这份私人菜单',async()=>{await api('menu/import-confirm',{menu,digest:preview.digest,expected:preview.expected,confirmed:true});await fetchMenu();render();toast('菜单已导入。个人档案仍待迁移。');},false));}catch(error){output.textContent=error instanceof SyntaxError?'菜单文件格式不正确，请选择完整的 menu.json 文件。':error.message;}};
+  file.onchange=async()=>{output.replaceChildren();try{if(!file.files[0]||file.files[0].size>1500000)throw new Error('请选择小于1.5MB的menu.json');const menu=JSON.parse(await file.files[0].text());const preview=await(await api('menu/import-preview',menu)).json();output.append(element('p',`版本 ${preview.version} · ${preview.groups} 组 · 每组 ${preview.meals} 餐 · ${preview.identity}`),element('p',preview.message),button('确认导入这份私人菜单',async()=>{await api('menu/import-confirm',{menu,digest:preview.digest,expected:preview.expected,confirmed:true});await fetchMenu();render();toast('菜单已导入。');},false));}catch(error){output.textContent=error instanceof SyntaxError?'菜单文件格式不正确，请选择完整的 menu.json 文件。':error.message;}};
   panel.append(file,output);return panel;
 }
 async function syncMenuDate(){try{const previous=TODAY;const fresh=await(await api('menu'+(menuDate?'?date='+menuDate:''))).json();if(fresh.enabled&&previous!==fresh.today){TODAY=fresh.today;TOMORROW=fresh.tomorrow;await fetchMenu(page()==='today'?TODAY:TOMORROW);await refreshState();render();}}catch(error){toast(error.message);}}

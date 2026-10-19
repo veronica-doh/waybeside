@@ -11,13 +11,14 @@ import json
 import re
 from datetime import datetime
 from flask import abort, g, jsonify, request
-from .storage import (connect, encode, audit, BLOCKS, SHARE_CATEGORIES, is_onboarded, share_flags,
+from .storage import (field, connect, encode, audit, BLOCKS, SHARE_CATEGORIES, is_onboarded, share_flags,
                       questionnaire, disclaimer_accepted, assistant_mode, assistant_mode_version)
 from .sessions import apply_course, course_row, public_course, CourseError, conflict
 
 TAG = re.compile(r'^[a-z0-9_]{1,40}$')
 # 内置词表只是“显示名 ↔ 键”，不带任何阈值、食物清单或临床含义。
 BUILTIN_TAGS = {'soft_texture': '软烂质地', 'small_frequent_meals': '少食多餐', 'avoid_spicy': '避免辛辣', 'avoid_raw': '避免生食'}
+HELPER_MODES = ('self', 'with_helper')
 AGE_BANDS = ('under_18', '18_39', '40_64', '65_plus')
 
 # 每块允许的键。其余一律由 exact() 拒绝——姓名、证件号、体重、身高等字段不在其中。
@@ -54,70 +55,83 @@ def string_list(value, limit_items, limit_chars):
 
 
 def clean_basic(a, exact):
-    exact(a, BLOCK_KEYS['basic'])
+    with field('answers'):
+        exact(a, BLOCK_KEYS['basic'])
     out = {}
     if 'nickname' in a:
-        out['nickname'] = text(a['nickname'], 20)
+        with field('nickname'):
+            out['nickname'] = text(a['nickname'], 20)
     if 'age_band' in a:
-        out['age_band'] = a['age_band'] if is_unknown(a['age_band']) else enum(a['age_band'], AGE_BANDS)
-    if 'helper_mode' not in a:
-        raise ValueError('需要选择谁在使用')
-    out['helper_mode'] = enum(a['helper_mode'], ('self', 'with_helper'))
-    out['locale'] = enum(a.get('locale', 'zh-CN'), ('zh-CN',))
+        with field('age_band'):
+            out['age_band'] = a['age_band'] if is_unknown(a['age_band']) else enum(a['age_band'], AGE_BANDS)
+    with field('helper_mode'):
+        if 'helper_mode' not in a:
+            raise ValueError('需要选择谁在使用')
+        out['helper_mode'] = enum(a['helper_mode'], HELPER_MODES)
+    with field('locale'):
+        out['locale'] = enum(a.get('locale', 'zh-CN'), ('zh-CN',))
     return out
 
 def clean_diet(a, exact):
-    exact(a, BLOCK_KEYS['diet'])
+    with field('answers'):
+        exact(a, BLOCK_KEYS['diet'])
     out = {}
-    custom = a.get('custom_tags', [])
-    if not isinstance(custom, list) or len(custom) > 30:
-        raise ValueError('自加标签')
-    for item in custom:
-        exact(item, ('id', 'label'))
-        if set(item) != {'id', 'label'} or not isinstance(item['id'], str) or not TAG.match(item['id']):
-            raise ValueError('自加标签键')
-        text(item['label'], 20, 1)
-    ids = [i['id'] for i in custom]
-    if len(set(ids)) != len(ids) or set(ids) & set(BUILTIN_TAGS):
-        raise ValueError('自加标签重复')
-    out['custom_tags'] = custom
+    with field('custom_tags'):
+        custom = a.get('custom_tags', [])
+        if not isinstance(custom, list) or len(custom) > 30:
+            raise ValueError('自加标签')
+        for item in custom:
+            exact(item, ('id', 'label'))
+            if set(item) != {'id', 'label'} or not isinstance(item['id'], str) or not TAG.match(item['id']):
+                raise ValueError('自加标签键')
+            text(item['label'], 20, 1)
+        ids = [i['id'] for i in custom]
+        if len(set(ids)) != len(ids) or set(ids) & set(BUILTIN_TAGS):
+            raise ValueError('自加标签重复')
+        out['custom_tags'] = custom
     if 'requirement_tags' in a:
-        tags = a['requirement_tags']
-        if is_unknown(tags):
-            out['requirement_tags'] = tags
-        else:
-            string_list(tags, 50, 40)
-            if any(not TAG.match(t) or (t not in BUILTIN_TAGS and t not in ids) for t in tags):
-                raise ValueError('标签须来自内置词表或自加标签')
-            out['requirement_tags'] = tags
+        with field('requirement_tags'):
+            tags = a['requirement_tags']
+            if is_unknown(tags):
+                out['requirement_tags'] = tags
+            else:
+                string_list(tags, 50, 40)
+                if any(not TAG.match(t) or (t not in BUILTIN_TAGS and t not in ids) for t in tags):
+                    raise ValueError('标签须来自内置词表或自加标签')
+                out['requirement_tags'] = tags
     if 'allergy_reminders' in a:
-        value = a['allergy_reminders']
-        out['allergy_reminders'] = value if is_unknown(value) else string_list(value, 30, 20)
+        with field('allergy_reminders'):
+            value = a['allergy_reminders']
+            out['allergy_reminders'] = value if is_unknown(value) else string_list(value, 30, 20)
     if 'free_note' in a:
-        out['free_note'] = text(a['free_note'], 500)
+        with field('free_note'):
+            out['free_note'] = text(a['free_note'], 500)
     return out
 
 def clean_habit(a, exact):
-    exact(a, BLOCK_KEYS['habit'])
+    with field('answers'):
+        exact(a, BLOCK_KEYS['habit'])
     out = {}
     for key, choices in (('sleep_usual', ('unknown', 'regular', 'irregular')), ('activity_usual', ('none', 'light', 'regular'))):
         if key in a:
-            out[key] = a[key] if is_unknown(a[key]) else enum(a[key], choices)
+            with field(key):
+                out[key] = a[key] if is_unknown(a[key]) else enum(a[key], choices)
     if 'meditation_usual' in a:
-        value = a['meditation_usual']
-        if is_unknown(value):
-            out['meditation_usual'] = value
-        else:
-            exact(value, ('time', 'minutes'))
-            if set(value) != {'time', 'minutes'}:
-                raise ValueError('冥想习惯')
-            if value['time'] is not None:
-                text(value['time'], 5)
-                datetime.strptime(value['time'], '%H:%M')
-            minutes = value['minutes']
-            if minutes is not None and (type(minutes) is not int or not 0 <= minutes <= 180):
-                raise ValueError('冥想分钟数')
-            out['meditation_usual'] = value
+        with field('meditation_usual'):
+            value = a['meditation_usual']
+            if is_unknown(value):
+                out['meditation_usual'] = value
+            else:
+                exact(value, ('time', 'minutes'))
+                if set(value) != {'time', 'minutes'}:
+                    raise ValueError('冥想习惯')
+                if value['time'] is not None:
+                    text(value['time'], 5)
+                    datetime.strptime(value['time'], '%H:%M')
+                minutes = value['minutes']
+                if minutes is not None and (type(minutes) is not int or not 0 <= minutes <= 180):
+                    raise ValueError('冥想分钟数')
+                out['meditation_usual'] = value
     return out
 
 CLEANERS = {'basic': clean_basic, 'diet': clean_diet, 'habit': clean_habit}
