@@ -29,7 +29,7 @@ SAYS = dict(MODE_SAYS, **{
     'SERVICE_NOT_RUNNING': 'WayBeside 服务没有在运行，请先启动服务。',
     'ROUTE_NOT_ALLOWED': '这个接口不对助手开放，或者接口名写错了。请对照 AGENTS.md 里的接口列表；需要人做的事，请转告他在网页上做。',
     'SHARE_DISABLED': '你还没有开启“菜单库”共享。请到网页「设置 → 导出给助手」里打开它，我才能挑菜单。',
-    'OUTPUT_INSIDE_REPO': '这个输出位置在应用目录或代码仓库里，健康资料不能放在那里。请换到仓库以外的工作目录。',
+    'OUTPUT_INSIDE_REPO': '这个输出位置在应用目录或代码仓库里，资料不能放在那里。请换到仓库以外的工作目录。',
     'JOB_NOT_WAITING': '这个任务已经不在等待提交了（可能已经提交过、被新的 export 替换或已失效）。请重新 export。',
     'DEMO_DIR_NOT_SAFE': '演示数据不能放在真实数据目录里，未执行。',
     'OUTPUT_EXISTS': '输出文件已存在，请换一个新文件名。',
@@ -215,13 +215,14 @@ def run(args, directory, path):
     meta = inspect(path)
     gate(command, meta)
     extra = check_today(directory)
+    # export / dump / backup 的 --output 用同一个检查（不传 --output 的 export 仍写数据目录下的 agent_inbox）。
+    if command in ('export', 'backup', 'dump') and getattr(args, 'output', None) and output_is_inside_a_repository(args.output):
+        raise Failure('OUTPUT_INSIDE_REPO')          # 先拦，库和文件系统都不动
     if command == 'export':
         target = args.date or (date.fromisoformat(effective_today()) + timedelta(days=1)).isoformat()
         return dict(export_package(path, target, args.output), **extra)
     if command == 'submit':
         return dict(submit_candidate(path, args.file), **extra)
-    if command in ('backup', 'dump') and output_is_inside_a_repository(args.output):
-        raise Failure('OUTPUT_INSIDE_REPO')          # 先拦，库和文件系统都不动
     if command == 'backup':
         try:
             backup_database(path, args.output)

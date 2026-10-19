@@ -1,5 +1,6 @@
 """登录码过期文件的清理、事务内方式检查的写法无关性、文案与文档补充。"""
 import json
+from pathlib import Path
 import time
 
 import pytest
@@ -293,3 +294,38 @@ def test_open_url_message_depends_on_whether_the_mode_was_chosen(tmp_path, monke
     choose_mode(env, 'menu_only')
     again = cli('open-url')[1]['say']
     assert '重新打开了' in again and '免责' not in again
+
+
+def test_export_output_inside_a_repository_is_refused_but_the_default_still_works(tmp_path, monkeypatch, capsys):
+    from waybeside import agent_door
+    from test_operator_core import library_ready, TARGET
+    data = tmp_path / 'data'
+    data.mkdir()
+    env = make_env(data, mode=None)
+    choose_mode(env, 'full')
+    library_ready(env)
+    cli = Cli(monkeypatch, capsys, data)
+    db_file = data / 'waybeside.sqlite'
+    repo = tmp_path / 'repo'
+    (repo / '.git').mkdir(parents=True)
+    from sqlite3 import connect as raw
+    def counts():
+        with raw(db_file) as db:
+            return db.execute('SELECT (SELECT COUNT(*) FROM menu_candidate),(SELECT COUNT(*) FROM audit)').fetchone()
+    before = counts()
+    for target in (agent_door.APP_DIR / 'package-test-output.json', repo / 'package.json', agent_door.APP_DIR / 'x' / 'p.json'):
+        code, out = cli('export', '--date', TARGET, '--output', target)
+        assert code == 2 and out['error'] == 'OUTPUT_INSIDE_REPO' and out['say'], (target, out)
+        assert not target.exists()
+    assert counts() == before                                              # 没有生成任务，也没有 audit
+    link = tmp_path / 'link'
+    link.symlink_to(repo, target_is_directory=True)
+    assert cli('export', '--date', TARGET, '--output', link / 'p.json')[1]['error'] == 'OUTPUT_INSIDE_REPO'
+    # 仓库外正常；不传 --output 时照旧写到数据目录下的 agent_inbox
+    code, out = cli('export', '--date', TARGET, '--output', tmp_path / 'outside' / 'p.json')
+    assert code == 0 or out.get('error') == 'FILE_OR_DATE_ERROR'
+    (tmp_path / 'fine').mkdir()
+    code, out = cli('export', '--date', TARGET, '--output', tmp_path / 'fine' / 'p.json')
+    assert code == 0 and Path(out['package']).is_file()
+    code, out = cli('export', '--date', TARGET)
+    assert code == 0 and Path(out['package']).parent == data / 'agent_inbox'
