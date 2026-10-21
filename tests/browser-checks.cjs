@@ -21,7 +21,7 @@ async function stop(){if(server&&server.exitCode===null){const done=new Promise(
 (async()=>{
  fs.mkdirSync(outDir,{recursive:true});
  try{
- const url=await start();browser=await chromium.launch({channel:'chrome',headless:true});
+ const url=await start();browser=await chromium.launch({headless:true});
  const ctx=await browser.newContext({reducedMotion:'reduce',viewport:{width:1366,height:768}});
  await ctx.route('**/*',route=>{const u=new URL(route.request().url());if(u.protocol==='http:'&&u.hostname==='127.0.0.1')route.continue();else if(u.protocol==='file:')route.continue();else{external.push(u.origin);route.abort();}});
  const p=await ctx.newPage();p.on('pageerror',e=>errors.push(e.message));

@@ -13,7 +13,7 @@ async function scenario(name,width,old,body){
   const start=async()=>{const port=await new Promise(res=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const x=s.address().port;s.close(()=>res(x));});});const ready=path.join(tmp,'ready-'+Date.now()+'.json');server=cp.spawn(py,[path.join(root,'run.py'),'--port',String(port),'--no-browser','--ready-file',ready],{cwd:root,env,stdio:'ignore'});for(let i=0;i<100&&!fs.existsSync(ready);i++)await delay(50);return JSON.parse(fs.readFileSync(ready)).url;};
   const stop=async()=>{if(server&&server.exitCode===null){const d=new Promise(r=>server.once('exit',r));server.kill('SIGTERM');await d;}};
   try{
-    browser=await chromium.launch({channel:'chrome',headless:true});
+    browser=await chromium.launch({headless:true});
     const ctx=await browser.newContext({reducedMotion:'reduce',viewport:{width,height:width<500?812:900}});
     await ctx.route('**/*',r=>{new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort();});
     const p=await ctx.newPage();p.on('pageerror',e=>errors.push(e.message));

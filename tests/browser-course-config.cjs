@@ -15,7 +15,7 @@ async function scenario(name,body){
     server=cp.spawn(pyPath,[path.join(root,'run.py'),'--port',String(port),'--no-browser','--ready-file',ready],{env:{...process.env,WAYBESIDE_DATA_DIR:path.join(tmp,'data'),WAYBESIDE_TODAY:'2031-03-04'},stdio:'ignore'});
     for(let i=0;i<100&&!fs.existsSync(ready);i++)await delay(50);
     const url=JSON.parse(fs.readFileSync(ready)).url;
-    browser=await chromium.launch({channel:'chrome',headless:true});
+    browser=await chromium.launch({headless:true});
     const ctx=await browser.newContext({reducedMotion:'reduce',viewport:{width:1366,height:900}});
     await ctx.route('**/*',route=>{const u=new URL(route.request().url());u.hostname==='127.0.0.1'?route.continue():route.abort();});
     const p=await ctx.newPage();p.on('pageerror',e=>errors.push(e.message));

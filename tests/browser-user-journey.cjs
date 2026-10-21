@@ -20,7 +20,7 @@ async function scenario(name,width,body){
     server=cp.spawn(py,[path.join(root,'run.py'),'--port',String(port),'--no-browser','--ready-file',ready],{cwd:root,env,stdio:'ignore'});
     for(let i=0;i<100&&!fs.existsSync(ready);i++)await delay(50);
     const url=JSON.parse(fs.readFileSync(ready)).url;
-    browser=await chromium.launch({channel:'chrome',headless:true});
+    browser=await chromium.launch({headless:true});
     const ctx=await browser.newContext({reducedMotion:'reduce',viewport:{width,height:width<500?812:900}});
     await ctx.route('**/*',r=>{new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort();});
     const p=await ctx.newPage();p.on('pageerror',e=>errors.push(e.message));

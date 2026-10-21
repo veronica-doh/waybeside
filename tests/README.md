@@ -7,6 +7,8 @@ Python tests:
 
 Browser tests (Playwright is a devDependency of this repo):
 
+浏览器测试统一使用 Playwright 安装的 Chromium，无需另装 Google Chrome。
+
     npm ci && npx playwright install chromium
     node tests/browser-checks.cjs
     node tests/browser-menu-door.cjs
